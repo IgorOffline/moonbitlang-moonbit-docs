@@ -18,14 +18,15 @@ Unlike some other languages, MoonBit treats `Unit` as a first-class type, allowi
 
 ### Boolean
 
-MoonBit has a built-in boolean type, which has two values: `true` and `false`. The boolean type is used in conditional expressions and control structures.
+MoonBit has a built-in boolean type, which has two values: `true` and `false`. The boolean type is used in conditional expressions and control structures. Use `!` to negate a boolean value; `not(x)` is equivalent.
 
 ```moonbit
 let a = true
 let b = false
 let c = a && b
 let d = a || b
-let e = not(a)
+let e = !a
+let f = not(a)
 ```
 
 ### Number
@@ -143,27 +144,38 @@ println("The answer is \{x}")
 #### NOTE
 The interpolated expression can not contain newline, `{}` or `"`.
 
-Multi-line strings can be defined using the leading `#|` or `$|`, where the former will keep the raw string and the former will perform the escape and interpolation:
+Multi-line strings can be defined using the leading `#|` or `$|`, where the former will keep the raw string and the latter will perform the escape and interpolation:
 
 ```moonbit
 let lang = "MoonBit"
-let str =
+let raw =
   #| Hello
   #| ---
-  $| \{lang}\n
+  #| \{lang}
   #| ---
-println(str)
+let interp =
+  $| Hello
+  $| ---
+  $| \{lang}
+  $| ---
+println(raw)
+println(interp)
 ```
 
 ```default
  Hello
  ---
+ \{lang}
+ ---
+ Hello
+ ---
  MoonBit
-
  ---
 ```
 
-The [VSCode extension](../toolchain/vscode/index.md#actions) can help you switch between a plain text and the MoonBit's multiline string.
+Avoid mixing `$|` and `#|` within the same multi-line string; pick one style for the whole block.
+
+The [VSCode extension](../toolchain/vscode/index.md#actions) includes an action that can turn pasted documents into a plain multi-line string and switch between plain text and MoonBit multi-line strings.
 
 When the expected type is `String` , the array literal syntax is overloaded to
 construct the `String` by specifying each character in the string.
@@ -392,7 +404,8 @@ test {
 }
 ```
 
-There are `Array[T]` and `FixedArray[T]`:
+There are `Array[T]` and `FixedArray[T]`. Views are provided by `ArrayView[T]`
+and `MutArrayView[T]` (see below).
 
 `Array[T]` can grow in size, while `FixedArray[T]` has a fixed size, thus it needs to be created with initial value.
 
@@ -443,8 +456,9 @@ view of array `data`, referencing elements from `start` to `end` (exclusive).
 Both `start` and `end` indices can be omitted.
 
 #### NOTE
-`ArrayView` is an immutable data structure on its own, but the underlying `Array` or `FixedArray`
-could be modified.
+`ArrayView` is an immutable data structure on its own, but the underlying
+`Array` or `FixedArray` could be modified. For a mutable view, use
+`MutArrayView[T]` via `data.mut_view(...)`.
 
 ```moonbit
 test {
@@ -454,6 +468,9 @@ test {
   inspect(xs[:4], content="[0, 1, 2, 3]")
   inspect(xs[2:5], content="[2, 3, 4]")
   inspect(xs[:], content="[0, 1, 2, 3, 4, 5]")
+  let mv : MutArrayView[Int] = xs.mut_view(start=1, end=3)
+  mv[0] = 99
+  inspect(xs[1], content="99")
 }
 ```
 
@@ -728,6 +745,40 @@ test {
   let counter : Ref[Int] = { val: 0 }
   inspect(incr(counter~), content="{val: 1}")
   inspect(incr(counter~), content="{val: 2}")
+}
+```
+
+Optional argument values are regular expressions at the call site. You can pass
+expressions that may raise errors or call async functions when in a `raise` or
+`async` context:
+
+```moonbit
+fn may_fail(x : Int) -> Int raise Failure {
+  if x < 0 {
+    fail("negative")
+  }
+  x
+}
+
+fn add_with_optional(base : Int, extra? : Int = 1) -> Int {
+  base + extra
+}
+
+test {
+  inspect(add_with_optional(1, extra=may_fail(2)), content="3")
+}
+```
+
+For async functions, optional argument expressions can call async functions as
+usual:
+
+```moonbit
+async fn fetch_default() -> Int raise { ... }
+
+async fn build(x? : Int = fetch_default()) -> Int raise { ... }
+
+async fn use_value() -> Int raise {
+  build(x=fetch_default())
 }
 ```
 
@@ -1280,7 +1331,9 @@ takes an operation and a sequence then consumes the sequence with that operation
 being applied to the sequence. The former is called *external iterator* (visible
 to user) and the latter is called *internal iterator* (invisible to user).
 
-The built-in type `Iter[T]` is MoonBit's internal iterator implementation.
+The built-in type `Iter[T]` is MoonBit's external iterator implementation. It
+exposes `next()` to pull the next value: it returns `Some(value)` and advances
+the iterator, or `None` when the iteration is finished.
 Almost all built-in sequential data structures have implemented `Iter`:
 
 ```moonbit
@@ -1307,7 +1360,7 @@ Commonly used methods include:
 - `map`: *lazy* Transforms the elements of the iterator using a mapping function.
 - `concat`: *lazy* Combines two iterators into one by appending the elements of the second iterator to the first.
 
-Methods like `filter` `map` are very common on a sequence object e.g. Array.
+Methods like `filter` and `map` are very common on a sequence object e.g. Array.
 But what makes `Iter` special is that any method that constructs a new `Iter` is
 *lazy* (i.e. iteration doesn't start on call because it's wrapped inside a
 function), as a result of no allocation for intermediate value. That's what
@@ -1323,46 +1376,23 @@ an `Iter[S]`. Take `Bytes` as an example:
 ```moonbit
 ///|
 fn iter(data : Bytes) -> Iter[Byte] {
-  Iter::new(fn(visit : (Byte) -> IterResult) -> IterResult {
-    for byte in data {
-      guard visit(byte) is IterContinue else { break IterEnd }
+  let mut index = 0
+  Iter::new(fn() -> Byte? {
+    if index < data.length() {
+      let byte = data[index]
+      index += 1
+      Some(byte)
     } else {
-      IterContinue
+      None
     }
   })
 }
 ```
 
-Almost all `Iter` implementations are identical to that of `Bytes`, the only
-main difference being the code block that actually does the iteration.
-
-### Implementation details
-
-The type `Iter[T]` is basically a type alias for `((T) -> IterResult) -> IterResult`,
-a higher-order function that takes an operation and `IterResult` is an enum
-object that tracks the state of current iteration which consists any of the 2
-states:
-
-- `IterEnd`: marking the end of an iteration
-- `IterContinue`: marking the end of an iteration is yet to be reached, implying the iteration will still continue at this state.
-
-To put it simply, `Iter[T]` takes a function `(T) -> IterResult` and use it to
-transform `Iter[T]` itself to a new state of type `IterResult`. Whether that
-state being `IterEnd` `IterContinue` depends on the function.
-
-Iterator provides a unified way to iterate through data structures, and they
-can be constructed at basically no cost: as long as `fn(yield)` doesn't
-execute, the iteration process doesn't start.
-
-Internally a `Iter::run()` is used to trigger the iteration. Chaining all sorts
-of `Iter` methods might be visually pleasing, but do notice the heavy work
-underneath the abstraction.
-
-Thus, unlike an external iterator, once the iteration starts
-there's no way to stop unless the end is reached. Methods such as `count()`
-which counts the number of elements in a iterator looks like an `O(1)` operation
-but actually has linear time complexity. Carefully use iterators or
-performance issue might occur.
+Iterators are single-pass: once you call `next()` or consume them with methods
+like `each`, `fold`, or `collect`, their internal state advances and cannot be
+reset. If you need to traverse the sequence again, request a new `Iter` from
+the source.
 
 ## Custom Data Types
 
@@ -1931,6 +1961,100 @@ test {
 }
 ```
 
+### Bitstring Pattern
+
+Bitstring patterns can match packed bit fields from byte containers. They are
+supported on `BytesView`, `Bytes`, `Array[Byte]`, `FixedArray[Byte]`,
+`ReadOnlyArray[Byte]`, and `ArrayView[Byte]`. Use explicit widths with
+`be`/`le` suffixes to make endianness clear.
+`be` supports widths 1..64; `le` is only defined for byte-aligned widths (8 \*
+n), since little-endian order is defined on bytes. Without `..`, the pattern
+must consume the entire view.
+
+```moonbit
+test {
+  let packet : Bytes = b"\xD2\x10\x7F"
+  let header : BytesView = packet[0:2]
+  let (flag, kind, version, length) = match header {
+    [u1be(flag), u3be(kind), u4be(version), u8be(length)] => (flag, kind, version, length)
+    _ => fail("bad header")
+  }
+  assert_eq(flag, 1)
+  assert_eq(kind, 0b101)
+  assert_eq(version, 0b0010)
+  assert_eq(length, 16)
+}
+```
+
+Use literal bit patterns to validate headers, and `..` to capture the remaining
+data for the next parse step.
+
+```moonbit
+test {
+  let data : Bytes = b"\xF1\xAA\xBB"
+  let view : BytesView = data[0:]
+  let tag = match view {
+    [u4be(0b1111), u4be(tag), ..rest] => {
+      assert_eq(rest, b"\xAA\xBB"[0:])
+      tag
+    }
+    _ => fail("bad prefix")
+  }
+  assert_eq(tag, 0b0001)
+}
+```
+
+Examples over common byte containers (note the `MutArrayView` slice):
+
+```moonbit
+test {
+  let b : Bytes = b"\x80"
+  guard b is [u1be(1), ..] else { fail("Bytes") }
+
+  let a : Array[Byte] = [b'\x80']
+  guard a is [u1be(1), ..] else { fail("Array[Byte]") }
+
+  let f : FixedArray[Byte] = [b'\x80']
+  guard f is [u1be(1), ..] else { fail("FixedArray[Byte]") }
+
+  let r : ReadOnlyArray[Byte] = [b'\x80']
+  guard r is [u1be(1), ..] else { fail("ReadOnlyArray[Byte]") }
+
+  let v : ArrayView[Byte] = a[:]
+  guard v is [u1be(1), ..] else { fail("ArrayView[Byte]") }
+
+  let mv : MutArrayView[Byte] = a.mut_view()
+  guard mv[:] is [u1be(1), ..] else { fail("MutArrayView[Byte]") }
+}
+```
+
+Signed patterns use two's-complement semantics. For example, `u1be` yields `0`
+or `1`, while `i1be` yields `0` or `-1`:
+
+```moonbit
+test {
+  let bytes = b"\x80"
+  let u : UInt = match bytes[:] {
+    [u1be(u), ..] => u
+    _ => fail("u1be")
+  }
+  let i : Int = match bytes[:] {
+    [i1be(i), ..] => i
+    _ => fail("i1be")
+  }
+  assert_eq(u, 1U)
+  assert_eq(i, -1)
+}
+```
+
+Result types depend on width:
+
+| Width                | Result type    |
+|----------------------|----------------|
+| 1..32 bits (`u`/`i`) | `UInt` / `Int` |
+| 33..64 bits (`u`)    | `UInt64`       |
+| 33..64 bits (`i`)    | `Int64`        |
+
 ### Range Pattern
 
 For builtin integer types and `Char`, MoonBit allows matching whether the value falls in a specific range.
@@ -2084,6 +2208,7 @@ MoonBit provides a convenient pipe syntax `x |> f(y)`, which can be used to chai
 [] |> Array::push(5) // <=> Array::push([], 5)
 1
 |> add(5) // <=> add(1, 5)
+|> x => { x + 1 }
 |> ignore // <=> ignore(add(1, 5))
 ```
 
@@ -2092,6 +2217,8 @@ Thus, the pipe operator inserts the left-hand side value into the first argument
 For example, `x |> f(y)` is equivalent to `f(x, y)`.
 
 You can use the `_` operator to insert `x` into any argument of the function `f`, such as `x |> f(y, _)`, which is equivalent to `f(y, x)`. Labeled arguments are also supported.
+
+The pipe operator can also connect to an arrow function. When piping into an arrow function, the function body must be wrapped in curly braces, for example `value |> x => { x + 1 }`.
 
 ### Cascade Operator
 
@@ -2203,6 +2330,50 @@ fn init {
   guard j(42) is (Some(a) as b)
   println(a)
   println(b)
+}
+```
+
+### Lexmatch
+
+`lexmatch` matches a `String` against a regex pattern and lets you bind the
+pieces of a match. The search-mode pattern is `(before, regex pieces, after)`,
+where `before` and `after` are optional bindings for the unmatched prefix and
+suffix, separated by commas. The regex pieces in the middle are separated by
+whitespace only. The regex itself is written as a sequence of string literals,
+so you can split it across lines or insert comments between parts. You can
+also bind a matched sub-pattern using `as`, such as `("b*" as b)`.
+
+`lexmatch?` is a boolean check similar to `is`, and it can introduce binders
+for use in the same contexts as `is` expressions.
+
+`lexmatch` also supports a lexer-style mode: `lexmatch <expr> with longest`,
+which picks the longest match among alternatives (for example, `if|[a-z]*`
+matches `iff` as `iff` in longest mode, while search mode matches `if` first).
+
+Regex literals do not support `\\b`, `\\s`, or `\\w`. Use POSIX character
+classes like `[:digit:]` inside ranges (for example, `[[:digit:]]`).
+
+```moonbit
+test {
+  let text = "xxabbbcyy"
+  lexmatch text {
+    (before, "a" ("b*" as b) "c", after) => {
+      inspect(before, content="xx")
+      inspect(b, content="bbb")
+      inspect(after, content="yy")
+    }
+    _ => fail("")
+  }
+
+  if text lexmatch? ("a" ("b*" as b) "c") && b.length() > 0 {
+    inspect(b, content="bbb")
+  }
+
+  let keyword = "iff"
+  lexmatch keyword with longest {
+    ("if|[a-z]*" as ident) => inspect(ident, content="iff")
+    _ => fail("")
+  }
 }
 ```
 

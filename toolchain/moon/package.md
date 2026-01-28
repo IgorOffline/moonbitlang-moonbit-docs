@@ -1,6 +1,53 @@
 # Package Configuration
 
-moon uses the `moon.pkg.json` file to identify and describe a package. For full JSON schema, please check [moon's repository](https://github.com/moonbitlang/moon/blob/main/crates/moonbuild/template/pkg.schema.json).
+moon uses a package file to identify and describe a package. The legacy format
+is `moon.pkg.json`, and the new format is `moon.pkg`. For full JSON schema,
+please check [moon's repository](https://github.com/moonbitlang/moon/blob/main/crates/moonbuild/template/pkg.schema.json).
+
+## New format (`moon.pkg`)
+
+The new format is a concise DSL. You can generate or reformat it from an
+existing `moon.pkg.json` with:
+
+```bash
+NEW_MOON_PKG=1 moon fmt -C <module_dir>
+```
+
+Example:
+
+```text
+import {
+  "moonbit-community/language/packages/virtual",
+}
+
+options(
+  "is-main": true,
+  overrides: [ "moonbit-community/language/packages/implement" ],
+)
+```
+
+### Import and options
+
+In `moon.pkg`, dependencies are declared in an `import { ... }` block. Use
+`as @alias` to set a custom alias:
+
+```text
+import {
+  "moonbit-community/language/packages/pkgA",
+  "moonbit-community/language/packages/pkgC" as @c,
+  "moonbitlang/core/builtin",
+}
+```
+
+All other fields from `moon.pkg.json` move into a single `options(...)` block.
+The key names and value shapes are unchanged; keys that contain `-` must be
+quoted.
+
+```text
+options(
+  virtual: { "has-default": true },
+)
+```
 
 ## Name
 
@@ -21,18 +68,35 @@ The output of the linking process depends on the backend. When this field is set
 
 The `import` field is used to specify other packages that a package depends on.
 
-For example, the following imports `moonbitlang/quickcheck` and `moonbitlang/x/encoding`,
-aliasing the latter to `lib` and importing the function `encode` from the latter.
-User can write `@lib.encode` instead of `encode`.
+For example, the following imports `pkgA` and `pkgC`, aliasing `pkgC` to `c`.
+User can write `@c` to access definitions from `pkgC`.
+
+In `moon.pkg`, the equivalent is:
+
+```text
+import {
+  "moonbit-community/language/packages/pkgA",
+  "moonbit-community/language/packages/pkgC" as @c,
+  "moonbitlang/core/builtin",
+}
+```
 
 ```json
 {
-  "import": [
-    "moonbitlang/quickcheck",
-    { "path" : "moonbitlang/x/encoding", "alias": "lib", "value": ["encode"] }
-  ]
+    "import": [
+        "moonbit-community/language/packages/pkgA",
+        {
+            "path": "moonbit-community/language/packages/pkgC",
+            "alias": "c"
+        },
+        "moonbitlang/core/builtin"
+    ]
 }
 ```
+
+Core packages are not special here: if you use `@json`, `@test`, or other core
+aliases, add the corresponding `moonbitlang/core/...` package to `import` to
+avoid `core_package_not_imported` warnings.
 
 ### test-import
 
@@ -399,7 +463,7 @@ To treat a warning as a fatal error, use the `@`.
 You can also use warnings number in warning list. Here is the full list of warning names:
 
 ```default
-Available warnings:                       
+Available warnings:
     name                           description
   1 unused_value                   Unused variable or function.
   2 unused_value                   Unused variable.
@@ -425,6 +489,7 @@ Available warnings:
  22 ambiguous_block                Ambiguous block.
  23 unused_try                     Useless try expression.
  24 unused_error_type              Useless error type.
+ 25 test_unqualified_package       Using implicitly imported API in test.
  26 unused_catch_all               Useless catch all.
  27 deprecated_syntax              Deprecated syntax.
  28 todo                           Todo
@@ -432,9 +497,13 @@ Available warnings:
  30 missing_package_alias          Empty package alias.
  31 unused_optional_argument       Optional argument never supplied.
  32 unused_default_value           Default value of optional argument never used.
+ 33 text_segment_excceed           Text segment exceed the line or column limits.
+ 34 implicit_use_builtin           Implicit use of definitions from `moonbitlang/core/builtin`.
  35 reserved_keyword               Reserved keyword.
  36 loop_label_shadowing           Loop label shadows another label.
  37 unused_loop_label              Unused loop label.
+ 38 missing_invariant              For-loop is missing an invariant.
+ 39 missing_reasoning              For-loop is missing a reasoning.
  41 missing_rest_mark              Missing `..` in map pattern.
  42 invalid_attribute              Invalid attribute.
  43 unused_attribute               Unused attribute.
@@ -457,6 +526,12 @@ Available warnings:
  62 invalid_cascade                Calling method with non-unit return type via `..`
  63 syntax_lint                    Syntax lint warning
  64 unannotated_toplevel_array     Unannotated toplevel array
+ 65 prefer_readonly_array          Suggest ReadOnlyArray for read-only array literal
+ 66 prefer_fixed_array             Suggest FixedArray for mutated array literal
+ 67 unused_async                   Useless `async` annotation
+ 68 declaration_unimplemented      Declaration is unimplemented
+ 69 declaration_implemented        Declaration is already implemented
+ 70 deprecated_for_in_method       using `iterator()` method for `for .. in` loop.
   A                                all warnings
 ```
 
