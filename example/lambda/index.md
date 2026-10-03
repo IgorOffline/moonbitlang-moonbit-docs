@@ -36,13 +36,13 @@ To implement an interpreter for untyped Lambda calculus, the basic things we nee
 
 **Beta reduction** focuses on handling Lambda calls. Let's take an example:
 
-```default
+```none
 (λx.(λy.x)) (λs.(λz.z))
 ```
 
 In untyped Lambda calculus, all that needs to be done after calling a Lambda is to substitute the parameter. In the example above, we need to replace the variable `x` with `(λs.(λz.z))`, resulting in:
 
-```default
+```none
 (λy.(λs.(λz.z)))
 ```
 
@@ -52,13 +52,13 @@ If a variable in a Lambda term is not defined in its context, we call it a free 
 
 During Beta reduction, if the Lambda term used for variable substitution contains free variables, it may lead to a behavior called "variable capture":
 
-```default
+```none
 (λx.(λy.x)) (λz.y)
 ```
 
 After substitution:
 
-```default
+```none
 λy.λz.y
 ```
 
@@ -92,7 +92,7 @@ Next, I'll introduce a less popular but somewhat convenient method: de Bruijn in
 
 De Bruijn index is a technique for representing variables in Lambda terms using integers. Specifically, it replaces specific variables with Lambdas between the variable and its original imported position.
 
-```default
+```none
 λx.(λy.x (λz.z z))
 
 λ.(λ.1 (λ.0 0))
@@ -141,7 +141,7 @@ struct Index {
 }
 ```
 
-Then we write a helper function to find the corresponding `depth` based on a specific `name` from `@list.T[Index]`:
+Then we write a helper function to find the corresponding `depth` based on a specific `name` from `@list.List[Index]`:
 
 ```moonbit
 // Find the depth corresponding to the first varname in the environment
@@ -236,8 +236,8 @@ fn subst(t1 : TermDBI, t2 : TermDBI) -> TermDBI {
 
 ```
 
-Full code is available [here](/sources/lambda-expression/src/top.mbt)
+Full code is available [here](https://docs.moonbitlang.com/en/latest/example/lambda/sources/lambda-expression/src/top.mbt)
 
 ## Improvement
 
-When mapping variable names to indices, we used the `@list.T[Index]` type and updated the entire list every time we added a new Lambda. However, this is actually quite a clumsy method. I believe you can quickly realize that to store a `@list.T[String]` should simply suffice. If you're interested, you can try it yourself.
+When mapping variable names to indices, we used the `@list.List[Index]` type and updated the entire list every time we added a new Lambda. However, this is actually quite a clumsy method. I believe you can quickly realize that to store a `@list.List[String]` should simply suffice. If you're interested, you can try it yourself.

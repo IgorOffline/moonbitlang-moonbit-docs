@@ -40,10 +40,10 @@ my_project
 ├── cmd
 │   └── main
 │       ├── main.mbt
-│       └── moon.pkg.json
+│       └── moon.pkg
 ├── LICENSE
-├── moon.mod.json
-├── moon.pkg.json
+├── moon.mod
+├── moon.pkg
 ├── my_project_test.mbt
 ├── my_project.mbt
 ├── README.mbt.md
@@ -55,41 +55,34 @@ On Windows system, you need administrator privilege or the developer mode enable
 
 Here's a brief explanation of the directory structure:
 
-- `moon.mod.json` is used to identify a directory as a MoonBit module. It contains the module's metadata, such as the module name, version, etc.
-  ```json
-  {
-    "name": "username/my_project",
-    "version": "0.1.0",
-    "readme": "README.md",
-    "repository": "",
-    "license": "Apache-2.0",
-    "keywords": [],
-    "description": ""
-  }
+- `moon.mod` is used to identify a directory as a MoonBit module. It contains
+  the module's metadata, such as the module name and version.
+  ```moonbit
+  name = "username/my_project"
+  version = "0.1.0"
+  readme = "README.mbt.md"
+  repository = ""
+  license = "Apache-2.0"
+  keywords = []
+  description = ""
   ```
-- `.` and `cmd/main` directories: These are the packages within the module. Each package can contain multiple `.mbt` files, which are the source code files for the MoonBit language. However, regardless of how many `.mbt` files a package has, they all share a common `moon.pkg.json` file. `*_test.mbt` are separate test files in the package, these files are for blackbox test, so private members of the same package cannot be accessed directly.
-- `moon.pkg.json` is package descriptor. It defines the properties of the package, such as whether it is the main package and the packages it imports.
-  - `cmd/main/moon.pkg.json`:
-    ```json
-    {
-      "is-main": true,
-      "import": [
-        {
-          "path": "username/my_project",
-          "alias": "lib"
-        }
-      ]
+- `.` and `cmd/main` directories: These are the packages within the module. Each package can contain multiple `.mbt` files, which are the source code files for the MoonBit language. However, regardless of how many `.mbt` files a package has, they all share a common `moon.pkg` file. Older projects may still use the legacy `moon.pkg.json` format. `*_test.mbt` are separate test files in the package, these files are for blackbox tests, so private members of the same package cannot be accessed directly.
+- `moon.pkg` is the package descriptor. It defines the properties of the package, such as whether it is the main package and the packages it imports.
+  - `cmd/main/moon.pkg`:
+    ```moonbit
+    import {
+      "username/my_project" @lib,
     }
+
+    pkgtype(kind: "executable")
     ```
 
-    Here, `"is-main: true"` declares that the package contains an entry for the `moon run` command.
-  - `moon.pkg.json`:
-    ```json
-    {}
-    ```
+    Here, `pkgtype(kind: "executable")` declares that the package contains an
+    entry for the `moon run` command.
+  - `moon.pkg`:
 
-    This file is empty. Its purpose is simply to inform the build system that this folder is a package.
-- `README.mbt.md` is the README file. The code blocks written inside will be type checked and tested by `moon check` and `moon test`.
+    This file may be empty. Its purpose is simply to inform the build system that this folder is a package.
+- `README.mbt.md` is the README file. In this file, `mbt check` code blocks are checked and run by `moon check` and `moon test`.
 
 ## Working with Packages
 
@@ -102,7 +95,7 @@ The `username/my_project` package contains `my_project.mbt` and `my_project_test
 pub fn fib(n : Int) -> Int64 {
   for i = 0, a = 0L, b = 1L; i < n; i = i + 1, a = b, b = a + b {
 
-  } else {
+  } nobreak {
     b
   }
 }
@@ -146,28 +139,45 @@ $ moon test
 Total tests: 1, passed: 1, failed: 0.
 ```
 
-## Package Importing
+## Choosing a Target
 
-In the MoonBit's build system, the dependency is declared at the package level.
-To import the `username/my_project` package in `username/my_project/cmd/main`, you need to specify it in `cmd/main/moon.pkg.json`:
+Moon has three different target-related knobs, and they serve different jobs:
 
-```json
-{
-  "is-main": true,
-  "import": [
-    {
-      "path": "username/my_project",
-      "alias": "lib"
-    }
-  ]
-}
+- `--target` on the command line chooses which backend the current command uses
+- `preferred_target` in `moon.mod` chooses the default backend for `moon` and the language server
+- `supported_targets` declares which backends a module or package is intended to support
+
+For example, a native-first CLI project may set:
+
+```moonbit
+preferred_target = "native"
+supported_targets = "native"
 ```
 
-Here, `"username/my_project` specifies importing the root package and having an alias of `lib`, so you can use `@lib.fib(10)` in `cmd/main/main.mbt`.
+`supported_targets` uses target-set syntax such as `js`, `+js+wasm-gc`, or `+all-js`.
+
+If only some files are backend-specific, keep the module or package metadata broad and use
+[`targets`](https://docs.moonbitlang.com/en/latest/toolchain/moon/package.html#conditional-compilation) in `moon.pkg` or legacy `moon.pkg.json` to select files
+per backend.
+
+## Package Importing
+
+In the MoonBit build system, dependencies are declared at the package level.
+To import the `username/my_project` package in `username/my_project/cmd/main`, you need to specify it in `cmd/main/moon.pkg`:
+
+```moonbit
+import {
+  "username/my_project" @lib,
+}
+
+pkgtype(kind: "executable")
+```
+
+Here, `"username/my_project"` specifies importing the root package and having an alias of `lib`, so you can use `@lib.fib(10)` in `cmd/main/main.mbt`.
 
 ## Creating and Using a New Package
 
-First, create a new directory named `fib` under `lib`:
+First, create a new directory named `fib` in the module root:
 
 ```bash
 mkdir fib
@@ -199,8 +209,8 @@ pub fn fib_fast(num : Int) -> Int {
 }
 ```
 
-```json
-{}
+```moonbit
+// This package does not need extra options yet.
 ```
 
 After creating these files, your directory structure should look like this:
@@ -211,32 +221,28 @@ After creating these files, your directory structure should look like this:
 ├── cmd
 │   └── main
 │       ├── main.mbt
-│       └── moon.pkg.json
+│       └── moon.pkg
 ├── fib
 │   ├── fast.mbt
-│   ├── moon.pkg.json
+│   ├── moon.pkg
 │   └── slow.mbt
 ├── LICENSE
-├── moon.mod.json
-├── moon.pkg.json
+├── moon.mod
+├── moon.pkg
 ├── my_project_test.mbt
 ├── my_project.mbt
 ├── README.mbt.md
 └── README.md -> README.mbt.md
 ```
 
-In the `cmd/main/moon.pkg.json` file, import the `username/my_project/fib` package and customize its alias to `my_awesome_fibonacci`:
+In the `cmd/main/moon.pkg` file, import the `username/my_project/fib` package and customize its alias to `my_awesome_fibonacci`:
 
-```json
-{
-  "is_main": true,
-  "import": [
-    {
-      "path": "username/my_project/fib",
-      "alias": "my_awesome_fibonacci"
-    }
-  ]
+```moonbit
+import {
+  "username/my_project/fib" @my_awesome_fibonacci,
 }
+
+pkgtype(kind: "executable")
 ```
 
 This imports the `fib` package. After doing this, you can use the `fib` package in `cmd/main/main.mbt`. Replace the file content of `cmd/main/main.mbt` to:
@@ -262,9 +268,9 @@ Let's add some tests to verify our fib implementation. Add the following content
 
 ```moonbit
 test {
-  inspect(fib_slow(0))
-  inspect(fib_slow(1))
-  inspect(fib_slow(2))
+  inspect(@fib.fib_slow(0))
+  inspect(@fib.fib_slow(1))
+  inspect(@fib.fib_slow(2))
 }
 ```
 

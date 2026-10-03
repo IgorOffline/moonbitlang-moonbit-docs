@@ -44,9 +44,9 @@ This document contains the help content for the `moon` command-line program.
 * `check` — Check the current package, but don't build object files
 * `run` — Run a main package
 * `test` — Test the current package
-* `clean` — Remove the target directory
+* `clean` — Remove the \_build directory
 * `fmt` — Format source code
-* `doc` — Generate documentation
+* `doc` — Generate documentation or searching documentation for a symbol
 * `info` — Generate public interface (`.mbti`) files for all packages in the module
 * `bench` — Run benchmarks in the current package
 * `add` — Add a dependency
@@ -243,7 +243,7 @@ Test the current package
 
 ## `moon clean`
 
-Remove the target directory
+Remove the \_build directory
 
 **Usage:** `moon clean`
 
@@ -267,9 +267,13 @@ Format source code
 
 ## `moon doc`
 
-Generate documentation
+Generate documentation or searching documentation for a symbol
 
-**Usage:** `moon doc [OPTIONS]`
+**Usage:** `moon doc [OPTIONS] [SYMBOL]`
+
+**Arguments:**
+
+* `<SYMBOL>` — [Deprecated] The symbol to query documentation for. Use `moon ide doc <SYMBOL>` instead.
 
 **Options:**
 
@@ -301,7 +305,12 @@ Generate public interface (`.mbti`) files for all packages in the module
 
 Run benchmarks in the current package
 
-**Usage:** `moon bench [OPTIONS]`
+**Usage:** `moon bench [OPTIONS] [PATH]...`
+
+**Arguments:**
+
+* `[PATH]...` — Run benchmarks for a filesystem path. `PATH` may point to a
+  package directory or a file inside a package.
 
 **Options:**
 

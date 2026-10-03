@@ -84,7 +84,7 @@ test {
 ### Local method
 
 To ensure single source of truth in method resolution and avoid ambiguity,
-[methods can only be defined in the same package as its type](packages.md#trait-implementations).
+[methods can only be defined in the same package as its type](https://docs.moonbitlang.com/en/latest/language/packages.html#trait-implementations).
 However, there is one exception to this rule: MoonBit allows defining *private* methods for foreign types locally.
 These local methods can override methods from the type's own package (MoonBit will emit a warning in this case),
 and provide extension/complementary to upstream API:
@@ -135,8 +135,8 @@ impl Add for T with add(self : T, other : T) -> T {
 }
 
 test {
-  let a = { x: 0 }
-  let b = { x: 2 }
+  let a = T::{ x: 0 }
+  let b = T::{ x: 2 }
   assert_eq((a + b).x, 2)
 }
 ```
@@ -147,7 +147,7 @@ Other operators are overloaded via methods with annotations, for example `_[_]` 
 struct Coord {
   mut x : Int
   mut y : Int
-} derive(Show)
+}
 
 #alias("_[_]")
 fn Coord::get(coord : Self, key : String) -> Int {
@@ -168,16 +168,16 @@ fn Coord::set(coord : Self, key : String, val : Int) -> Unit {
 
 ```moonbit
 fn main {
-  let c = { x: 1, y: 2 }
-  println(c)
+  let c = Coord::{ x: 1, y: 2 }
+  println("{x: \{c.x}, y: \{c.y}}")
   println(c["y"])
   c["x"] = 23
-  println(c)
+  println("{x: \{c.x}, y: \{c.y}}")
   println(c["x"])
 }
 ```
 
-```default
+```none
 {x: 1, y: 2}
 2
 {x: 23, y: 2}
@@ -277,14 +277,18 @@ pub impl MyShow for MyType with to_string(self) {
   ...
 }
 
+pub extend MyType with MyShow::{to_string}
+
 struct MyContainer[_] {}
 
-// trait implementation with type parameters.
-// `[X : Show]` means the type parameter `X` must implement `Show`,
-// this will be covered later.
+/// trait implementation with type parameters.
+/// `[X : Show]` means the type parameter `X` must implement `Show`,
+/// this will be covered later.
 pub impl[X : MyShow] MyShow for MyContainer[X] with to_string(self) {
   ...
 }
+
+pub extend MyContainer with MyShow::{to_string}
 ```
 
 Type annotation can be omitted for trait `impl`: MoonBit will automatically infer the type based on the signature of `Trait::method` and the self type.
@@ -339,9 +343,11 @@ impl Draw for Point with draw(self, x, y) {
   ()
 }
 
+impl Object for Point
+
 pub fn[O : Object] draw_object(obj : O) -> Unit {
-  let (x, y) = obj.pos()
-  obj.draw(x, y)
+  let (x, y) = Position::pos(obj)
+  Draw::draw(obj, x, y)
 }
 
 test {
@@ -350,9 +356,14 @@ test {
 }
 ```
 
+In a generic function constrained by a subtrait, call methods inherited from a
+supertrait with qualified syntax such as `Position::pos(obj)`. Calling those
+methods on the type parameter with dot syntax is deprecated because the method
+comes from the supertrait rather than the written constraint.
+
 For traits where all methods have default implementation,
 it is still necessary to explicitly implement them,
-in order to support features such as [abstract trait](packages.md#traits).
+in order to support features such as [abstract trait](https://docs.moonbitlang.com/en/latest/language/packages.html#traits).
 For this purpose, MoonBit provides the syntax `impl Trait for Type` (i.e. without the method part).
 `impl Trait for Type` ensures that `Type` implements `Trait`,
 MoonBit will automatically check if every method in `Trait` has corresponding implementation (custom or default).
@@ -362,6 +373,51 @@ the `impl Trait for Type` can also serve as documentation, or a TODO mark before
 
 #### WARNING
 Currently, an empty trait without any method is implemented automatically.
+
+#### Attaching trait methods with `extend`
+
+An `impl Trait for Type` declaration records that `Type` implements `Trait`.
+Use an `extend` declaration to explicitly attach selected trait methods to the
+type so that they can be called with dot syntax:
+
+```moonbit
+struct MyCustomType {}
+
+pub impl Show for MyCustomType with output(self, logger) {
+  ...
+}
+
+pub extend MyCustomType with Show::{to_string, output}
+
+fn f() -> Unit {
+  let x = MyCustomType::{  }
+  let _ = x.to_string()
+}
+```
+
+The general form is `extend Type with Trait::{method1, method2}`. Add `pub` to
+make the attached methods public; without `pub`, they are available only in the
+current package. A private type may still have a private `extend` declaration.
+
+When an attached trait method uses a default implementation, `Self` in that
+implementation is specialized to `Type`. Trait-object types can also be
+extended, for example `extend &Derived with Super::{method}`.
+
+Automatically attaching every method from an `impl` is deprecated. Besides
+being implicit, that behavior is not refactoring-safe: a new default method in
+an upstream trait can make an existing dot call ambiguous. Library authors
+should add an explicit `extend` for methods that are intended to be callable
+with dot syntax, or keep using `Trait::method(value, ...)` when no method-style
+API is intended.
+
+For compatibility, the compiler still accepts the old implicit attachment. It
+reports an `implicit_impl_as_method` deprecation diagnostic by default. New code
+should use `extend` rather than rely on the compatibility behavior.
+
+If an implicitly attached method should remain callable temporarily but is not
+part of the intended method-style API, add a corresponding `extend` declaration
+marked with `#deprecated`. This preserves a migration path for downstream code
+while directing users to qualified calls such as `Trait::method(value)`.
 
 ### Using traits
 
@@ -373,7 +429,7 @@ fn[X : Eq] contains(xs : Array[X], elem : X) -> Bool {
     if x == elem {
       return true
     }
-  } else {
+  } nobreak {
     false
   }
 }
@@ -409,32 +465,18 @@ test {
 }
 ```
 
-Trait implementations can also be invoked via dot syntax, with the following restrictions:
+For a future-proof concrete-type API, explicitly attach trait methods that
+should support dot syntax with
+[`extend`](). A regular method takes
+precedence over an attached trait method. Existing implicit dot calls remain
+accepted for compatibility but are deprecated.
 
-1. if a regular method is present, the regular method is always favored when using dot syntax
-2. only trait implementations that are located in the package of the self type can be invoked via dot syntax
-   - if there are multiple trait methods (from different traits) with the same name available, an ambiguity error is reported
-
-The above rules ensures that MoonBit's dot syntax enjoys good property while being flexible.
-For example, adding a new dependency never break existing code with dot syntax due to ambiguity.
-These rules also make name resolution of MoonBit extremely simple:
-the method called via dot syntax must always come from current package or the package of the type!
-
-Here's an example of calling trait `impl` with dot syntax:
-
-```moonbit
-struct MyCustomType {}
-
-pub impl Show for MyCustomType with output(self, logger) {
-  ...
-}
-
-fn f() -> Unit {
-  let x = MyCustomType::{  }
-  let _ = x.to_string()
-
-}
-```
+For type parameters, a method from the single written constraint may be called
+with dot syntax. Use qualified syntax for methods inherited from a supertrait,
+and for every trait method when the type parameter has multiple constraints.
+This makes the selected trait unambiguous. The same principle applies to trait
+objects: call supertrait methods with qualified syntax, or explicitly extend
+the trait-object type.
 
 ## Trait objects
 
@@ -476,7 +518,7 @@ test {
   let duck2 = Duck::make("duck2")
   let fox1 = Fox::make("fox1")
   let animals : Array[&Animal] = [duck1, duck2, fox1]
-  inspect(
+  debug_inspect(
     animals.map(fn(animal) { animal.speak() }),
     content=(
       #|["duck1: quack!", "duck2: quack!", "What does the fox say?"]
@@ -506,7 +548,7 @@ fn[Obj : CanLog] &Logger::write_object(self : &Logger, obj : Obj) -> Unit {
   obj.log(self)
 }
 
-// use the new method to simplify code
+/// use the new method to simplify code
 pub impl[A : CanLog, B : CanLog] CanLog for (A, B) with log(self, logger) {
   let (a, b) = self
   logger
@@ -514,7 +556,7 @@ pub impl[A : CanLog, B : CanLog] CanLog for (A, B) with log(self, logger) {
   ..write_object(a)
   ..write_string(", ")
   ..write_object(b)
-  ..write_string(")")
+  .write_string(")")
 }
 ```
 
@@ -556,16 +598,24 @@ MoonBit can automatically derive implementations for some builtin traits:
 struct T {
   a : Int
   b : Int
-} derive(Eq, Compare, Show, Default)
+} derive(Eq, Compare, Debug, Default)
+
+pub extend T with Eq::{not_equal, equal}
+
+pub extend T with Compare::{op_lt, op_le, op_ge, compare, op_gt}
+
+pub extend T with Debug::{to_repr}
+
+pub extend T with Default::{default}
 
 test {
-  let t1 = T::default()
+  let t1 : T = Default::default()
   let t2 = T::{ a: 1, b: 1 }
-  inspect(t1, content="{a: 0, b: 0}")
-  inspect(t2, content="{a: 1, b: 1}")
-  assert_not_eq(t1, t2)
+  debug_inspect(t1, content="{ a: 0, b: 0 }")
+  debug_inspect(t2, content="{ a: 1, b: 1 }")
+  assert_false(t1 == t2)
   assert_true(t1 < t2)
 }
 ```
 
-See [Deriving](derive.md) for more information about deriving traits.
+See [Deriving](https://docs.moonbitlang.com/en/latest/language/derive.html) for more information about deriving traits.

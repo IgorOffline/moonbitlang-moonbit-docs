@@ -20,7 +20,7 @@ instructions from the
 Verify your MoonBit installation (below are the versions at the time of
 writing):
 
-```default
+```none
 $ moon version --all
 moon 0.1.20250826 (8ab6c9e 2025-08-26) ~/.moon/bin/moon
 moonc v0.6.25+d6913262c (2025-08-27) ~/.moon/bin/moonc
@@ -32,17 +32,17 @@ moon-pilot 0.0.1-95f12db ~/.moon/bin/moon-pilot
 
 1. Install the `wit-bindgen` CLI tool, which generates MoonBit bindings from WIT
    files:
-   ```default
+   ```none
    $ cargo install wit-bindgen-cli
    ```
 2. Install `wasm-tools` for working with WebAssembly components:
-   ```default
+   ```none
    $ cargo install wasm-tools
    ```
 
 Verify the installations (below are the versions at the time of writing):
 
-```default
+```none
 $ wit-bindgen --version
 wit-bindgen-cli 0.45.0
 $ wasm-tools --version
@@ -92,12 +92,14 @@ $ wit-bindgen moonbit wit/world.wit --out-dir . \
     --derive-error
 ```
 
-This command generates the following directory structure:
+With versions that still emit the legacy `moon.mod.json` format, run `moon fmt`
+once in the generated project to migrate it to `moon.mod`. After that migration,
+the generated directory structure is:
 
-```default
+```none
 .
 ├── ffi
-│   ├── moon.pkg.json
+│   ├── moon.pkg
 │   └── top.mbt
 ├── gen
 │   ├── ffi.mbt
@@ -106,29 +108,29 @@ This command generates the following directory structure:
 │   │   └── docs
 │   │       └── adder
 │   │           └── add
-│   │               ├── moon.pkg.json
+│   │               ├── moon.pkg
 │   │               ├── stub.mbt
 │   │               └── top.mbt
-│   ├── moon.pkg.json
+│   ├── moon.pkg
 │   ├── world
 │   │   └── adder
-│   │       ├── moon.pkg.json
+│   │       ├── moon.pkg
 │   │       └── stub.mbt
 │   └── world_adder_export.mbt
-├── moon.mod.json
+├── moon.mod
 ├── wit
 │   └── world.wit
 └── world
     └── adder
         ├── ffi_import.mbt
         ├── import.mbt
-        ├── moon.pkg.json
+        ├── moon.pkg
         └── top.mbt
 ```
 
 The generated files include:
 
-- `moon.mod.json`: MoonBit module configuration
+- `moon.mod`: MoonBit module configuration
 - `gen/`: Generated export bindings
   - `interface/`: Generated export interface bindings
   - `world/`: Generated export world bindings
@@ -168,34 +170,26 @@ pub fn add(x : UInt, y : UInt) -> UInt {
 
 ## 6. Configure the Build
 
-Ensure your `gen/moon.pkg.json` is properly configured for WebAssembly target:
+Ensure your `gen/moon.pkg` is properly configured for WebAssembly target:
 
-```json
-{
-  // link configuration for Wasm backend
-  "link": {
+```text
+import {
+  "docs/adder/ffi" @ffi,
+  "docs/adder/gen/interface/docs/adder/add" @add,
+}
+
+options(
+  link: {
     "wasm": {
       "exports": [
-        // Export for cabi_realloc
         "cabi_realloc:cabi_realloc",
-        // Export per the interface definition
-        "wasmExportAdd:docs:adder/add@0.1.0#add"
+        "wasmExportAdd:docs:adder/add@0.1.0#add",
       ],
       "export-memory-name": "memory",
-      "heap-start-address": 16
-    }
-  },
-  "import": [
-    {
-      "path": "docs/adder/ffi",
-      "alias": "ffi"
+      "heap-start-address": 16,
     },
-    {
-      "path": "docs/adder/gen/interface/docs/adder/add",
-      "alias": "add"
-    }
-  ]
-}
+  },
+)
 ```
 
 ## 7. Build the WebAssembly Component
@@ -210,7 +204,7 @@ This generates a WebAssembly module. To create a proper WebAssembly component,
 use `wasm-tools`:
 
 ```console
-$ wasm-tools component embed wit target/wasm/release/build/gen/gen.wasm \
+$ wasm-tools component embed wit _build/wasm/release/build/gen/gen.wasm \
     --encoding utf16 \
     --output adder.wasm
 $ wasm-tools component new adder.wasm --output adder.component.wasm
@@ -253,7 +247,7 @@ $ cargo run --release -- 5 3 adder.component.wasm
 
 Expected output:
 
-```default
+```none
 5 + 3 = 8
 ```
 

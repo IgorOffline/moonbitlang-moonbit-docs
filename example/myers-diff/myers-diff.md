@@ -30,7 +30,7 @@ When we talk about the "difference" between two text files, what we are actually
 
 Assume the content of text a is
 
-```default
+```none
 A
 B
 C
@@ -42,7 +42,7 @@ A
 
 Assume the content of text b is
 
-```default
+```none
 C
 B
 A
@@ -91,7 +91,7 @@ In fact, it is one of the shortest edit sequences that can transform text a into
     set : RHTable[T, Unit]
   }
 +
-+ fn RHSet::new[T](capacity : Int) -> RHSet[T] {
++ fn[T] RHSet::new(capacity : Int) -> RHSet[T] {
 +  let set : RHTable[T, Unit]= RHTable::new(capacity)
 +  { set : set }
 + }
@@ -102,7 +102,7 @@ In fact, it is one of the shortest edit sequences that can transform text a into
     set : RHTable[T, Unit]
 + }
 +
-+ fn RHSet::new[T](capacity : Int) -> RHSet[T] {
++ fn[T] RHSet::new(capacity : Int) -> RHSet[T] {
 +  let set : RHTable[T, Unit]= RHTable::new(capacity)
 +  { set : set }
   }
@@ -110,7 +110,7 @@ In fact, it is one of the shortest edit sequences that can transform text a into
 
 When we insert a new function definition at the end of a file, the calculated edit sequence should ideally locate the changes at the end. In similar cases, when there are both deletions and insertions, it is best not to calculate an edit sequence that interleaves these two operations. Here's another example.
 
-```default
+```none
 Good:   - one         Bad:    - one
         - two                 + four
         - three               - two
@@ -125,7 +125,7 @@ Myers' diff algorithm can fulfill all those requirements. It is a greedy algorit
 
 The basic idea in Myers' paper is to construct a grid graph of edit sequences and then search for the shortest path on this graph. Using the previous example `a = ABCABBA` and `b = CBABAC`, we create an `(x, y)` coordinate grid.
 
-```default
+```none
     0     1     2     3     4     5     6     7
 
 0   o-----o-----o-----o-----o-----o-----o-----o
@@ -179,7 +179,7 @@ The implementation of the Myers algorithm adopts a clever approach by defining a
 
 Let's define another coordinate `d` to represent the depth of the search. Using `d` as the horizontal axis and `k` as the vertical axis, we can draw a tree diagram of the search process.
 
-```default
+```none
     |      0     1     2     3     4     5
 ----+--------------------------------------
     |
@@ -205,11 +205,13 @@ You can see that in each round of searching, `k` is strictly within the range `[
 Let's first define the `Line` struct, which represents a line in the text.
 
 ```moonbit
-///
 struct Line {
   number : Int // Line number
   text : String // Does not include newline
-} derive(Show, ToJson)
+} derive(ToJson)
+
+///|
+pub extend Line with ToJson::{to_json}
 
 ///|
 fn Line::new(number : Int, text : String) -> Line {
@@ -220,14 +222,13 @@ fn Line::new(number : Int, text : String) -> Line {
 Then, define a helper function that splits a string into `Array[Line]` based on newline characters. Note that line numbers start from 1.
 
 ```moonbit
-///
 fn lines(str : String) -> Array[Line] {
-  let lines = Array::new(capacity=50)
+  let lines = Array(capacity=50)
   let mut line_number = 0
   for line in str.split("\n") {
     line_number = line_number + 1
-    lines.push(Line::new(line_number, line.to_string()))
-  } else {
+    lines.push(Line::new(line_number, line.to_owned()))
+  } nobreak {
     return lines
   }
 }
@@ -252,7 +253,8 @@ fn[T] BPArray::copy(self : BPArray[T]) -> BPArray[T] {
 }
 
 ///|
-fn[T] BPArray::op_get(self : BPArray[T], idx : Int) -> T {
+#alias("_[_]")
+fn[T] BPArray::get(self : BPArray[T], idx : Int) -> T {
   let BPArray(arr) = self
   if idx < 0 {
     arr[arr.length() + idx]
@@ -262,7 +264,8 @@ fn[T] BPArray::op_get(self : BPArray[T], idx : Int) -> T {
 }
 
 ///|
-fn[T] BPArray::op_set(self : BPArray[T], idx : Int, elem : T) -> Unit {
+#alias("_[_]=_")
+fn[T] BPArray::set(self : BPArray[T], idx : Int, elem : T) -> Unit {
   let BPArray(arr) = self
   if idx < 0 {
     arr[arr.length() + idx] = elem
@@ -373,7 +376,7 @@ fn shortest_edit(old~ : Array[Line], new~ : Array[Line]) -> Int {
         return d
       }
     }
-  } else {
+  } nobreak {
     abort("impossible")
   }
 }

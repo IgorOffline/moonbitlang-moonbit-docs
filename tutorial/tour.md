@@ -5,7 +5,7 @@ tour. This article tries to be a succinct yet easy to understand guide for those
 who haven't programmed in a way that MoonBit enables them to, that is, in a more
 modern, functional way.
 
-See [the General Introduction](../language/index.md) if you want to straight
+See [the General Introduction](https://docs.moonbitlang.com/en/latest/language/index.html) if you want to straight
 delve into the language.
 
 ## Installation
@@ -51,29 +51,29 @@ To create a project (or module, more formally), run `moon new <path>`, where pat
 is the place you would like to place the project. For example, if you execute
 `moon new examine`, you will get:
 
-```default
+```none
 examine
 ├── Agents.md
 ├── cmd
 │   └── main
 │       ├── main.mbt
-│       └── moon.pkg.json
+│       └── moon.pkg
 ├── LICENSE
-├── moon.mod.json
-├── moon.pkg.json
-├── my_project_test.mbt
-├── my_project.mbt
+├── moon.mod
+├── moon.pkg
+├── examine_test.mbt
+├── examine.mbt
 ├── README.mbt.md
 └── README.md -> README.mbt.md
 ```
 
 which contains a `cmd/main` lib containing a `fn main` that serves as the entrance
-of the program. Try running `cd my_project && moon run cmd/main`.
+of the program. Try running `cd examine && moon run cmd/main`.
 
 In this tutorial, we assume the project name is `examine`,
 and the current working directory is also `examine`.
 
-## Example: Finding those who passed
+## Example: Finding students who passed the test
 
 In this example, we will try to find out, given the scores of some students, how
 many of them have passed the test?
@@ -81,11 +81,11 @@ many of them have passed the test?
 To do so, we will start with defining our data types, identify our functions,
 and write our tests. Then we will implement our functions.
 
-Unless specified, the following will be defined under the file `top.mbt`.
+Unless specified, the following will be defined under the file `examine.mbt`.
 
 ### Data types
 
-The [basic data types](../language/fundamentals.md#built-in-data-structures) in MoonBit includes the following:
+The [basic data types](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#built-in-data-structures) in MoonBit include the following:
 
 - `Unit`
 - `Bool`
@@ -98,10 +98,10 @@ The [basic data types](../language/fundamentals.md#built-in-data-structures) in 
 To represent a struct containing a student ID and a score using a primitive
 type, we can use a 2-tuple containing a student ID (of type `String`) and a
 score (of type `Double`) as `(String, Double)`. However this is not very
-intuitive as we can't identify with other possible data types, such as a struct
+intuitive as we can't distinguish with other possible data types, such as a struct
 containing a student ID and the height of the student.
 
-So we choose to declare our own data type using [struct](../language/fundamentals.md#struct):
+So we choose to declare our own data type using [struct](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#struct):
 
 ```moonbit
 struct Student {
@@ -111,7 +111,7 @@ struct Student {
 ```
 
 One can either pass or fail an exam, so the judgement result can be defined
-using [enum](../language/fundamentals.md#enum):
+using [enum](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#enum):
 
 ```moonbit
 enum ExamResult {
@@ -122,9 +122,9 @@ enum ExamResult {
 
 ### Functions
 
-[Function](../language/fundamentals.md#functions) is a piece of code that takes some inputs and produces a result.
+A [Function](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#functions) is a piece of code that takes some inputs and produces a result.
 
-In our example, we need to judge whether a student have passed an exam:
+In our example, we need to judge whether a student has passed an exam:
 
 ```moonbit
 fn is_qualified(student : Student, criteria: Double) -> ExamResult {
@@ -147,8 +147,8 @@ fn count_qualified_students(
 }
 ```
 
-In MoonBit, functions are first-classed, meaning that we can bind a function to a variable, pass a function as parameter or receiving a function as a result.
-This function takes an array of students' structs and another function that will judge whether a student have passed an exam.
+In MoonBit, functions are first-class, meaning that we can bind a function to a variable, pass a function as parameter or receive a function as a result.
+This function takes an array of students' structs and another function that will judge whether a student has passed an exam.
 
 ### Writing tests
 
@@ -186,7 +186,7 @@ trait Show {
 And the `assert_eq` uses them to constraint the passed parameters so that it can compare the two values and print them when they are not equal:
 
 ```moonbit
-fn assert_eq![A : Eq + Show](value : A, other : A) -> Unit {
+fn[A : Eq + Show] assert_eq!(value : A, other : A) -> Unit {
   ...
 }
 ```
@@ -195,7 +195,7 @@ We need to implement `Eq` and `Show` for our `ExamResult`. There are two ways to
 
 1. By defining an explicit implementation:
    ```moonbit
-   impl Eq for ExamResult with op_equal(self, other) {
+   impl Eq for ExamResult with equal(self, other) {
      match (self, other) {
        (Pass, Pass) | (Fail, Fail) => true
        _ => false
@@ -203,8 +203,8 @@ We need to implement `Eq` and `Show` for our `ExamResult`. There are two ways to
    }
    ```
 
-   Here we use [pattern matching](../language/fundamentals.md#pattern-matching) to check the cases of the `ExamResult`.
-2. Other is by [deriving](../language/derive.md) since `Eq` and `Show` are [builtin traits](../language/methods.md#builtin-traits) and the output for `ExamResult` is quite straightforward:
+   Here we use [pattern matching](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#pattern-matching) to check the cases of the `ExamResult`.
+2. An alternative way is by [deriving](https://docs.moonbitlang.com/en/latest/language/derive.html) since `Eq` and `Show` are [builtin traits](https://docs.moonbitlang.com/en/latest/language/methods.html#builtin-traits) and the output for `ExamResult` is quite straightforward:
    ```moonbit
    enum ExamResult {
      Pass
@@ -228,7 +228,7 @@ test "count qualified students" {
 }
 ```
 
-Here we use [lambda expressions](../language/fundamentals.md#local-functions) to reuse the previously defined `is_qualified` to create different criteria.
+Here we use [lambda expressions](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#local-functions) to reuse the previously defined `is_qualified` to create different criteria.
 
 We can run `moon test` to see whether the tests succeed or not.
 
@@ -250,7 +250,7 @@ In MoonBit, the result of the last expression is the return value of the functio
 
 For the `count_qualified_students` function, we need to iterate through the array to check if each student has passed or not.
 
-A naive version is by using a mutable value and a [`for` loop](../language/fundamentals.md#for-loop):
+A naive version is by using a mutable value and a [`for` loop](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#for-loop):
 
 ```moonbit
 fn count_qualified_students(
@@ -267,7 +267,7 @@ fn count_qualified_students(
 }
 ```
 
-However, this is neither efficient (due to the border check) nor intuitive, so we can replace the `for` loop with a [`for .. in` loop](../language/fundamentals.md#for-in-loop):
+However, this is neither efficient (due to the border check) nor intuitive, so we can replace the `for` loop with a [`for .. in` loop](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#for-in-loop):
 
 ```moonbit
 fn count_qualified_students(
@@ -282,7 +282,7 @@ fn count_qualified_students(
 }
 ```
 
-Still another way is use the functions defined for [iterator](../language/fundamentals.md#iterator):
+Still another way is use the functions defined for [iterator](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#iterator):
 
 ```moonbit
 fn count_qualified_students(
@@ -305,7 +305,7 @@ But before that, you have some other things to do.
 
 ### Adjusting the visibility
 
-To see how other people may use our program, MoonBit provides a mechanism called ["black box test"](../language/tests.md#blackbox-tests-and-whitebox-tests).
+To see how other people may use our program, MoonBit provides a mechanism called ["black box test"](https://docs.moonbitlang.com/en/latest/language/tests.html#blackbox-tests-and-whitebox-tests).
 
 Let's move the `test` block we defined above into a new file `top_test.mbt`.
 
@@ -345,21 +345,21 @@ And now, the compilation should work and the tests should pass again.
 
 ### Publishing the library
 
-Now that you've ready, you can publish this project to [mooncakes.io](https://mooncakes.io),
+Now that you're ready, you can publish this project to [mooncakes.io](https://mooncakes.io),
 the module registry of MoonBit. You can find other interesting projects there
 too.
 
 1. Execute `moon login` and follow the instruction to create your account with
    an existing GitHub account.
-2. Modify the project name in `moon.mod.json` to
+2. Modify the project name in `moon.mod` to
    `<your github account name>/<project name>`. Run `moon check` to see if
-   there's any other affected places in `moon.pkg.json`.
+   there's any other affected places in `moon.pkg`.
 3. Execute `moon publish` and your done. Your project will be available for
    others to use.
 
 By default, the project will be shared under [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0.html),
 which is a permissive license allowing everyone to use. You can also use other licenses, such as the [MulanPSL 2.0](https://spdx.org/licenses/MulanPSL-2.0.html),
-by changing the field `license` in `moon.mod.json` and the content of `LICENSE`.
+by changing the field `license` in `moon.mod` and the content of `LICENSE`.
 
 ### Closing
 

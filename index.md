@@ -1,16 +1,15 @@
 # MoonBit Documentation
 
-MoonBit is an end-to-end programming language toolchain for cloud and edge computing using WebAssembly.
+MoonBit is an end-to-end programming language toolchain for cloud and edge computing across `wasm`, `wasm-gc`, `js`, and `native` backends.
 
-The IDE environment is available at [https://try.moonbitlang.com](https://try.moonbitlang.com) without any installation; it does not rely on any server either.
+You can build mixed-backend projects in one module, such as a native backend and a web frontend that share the same domain model package.
 
 ## Get started
 
-- [**Tutorials**](tutorial/index.md): Follow tutorials to start your journey
-- [**Language**](language/index.md): Introduction to detailed language specifications
+- [**Tutorials**](https://docs.moonbitlang.com/en/latest/tutorial/index.html): Follow tutorials to start your journey
+- [**Language**](https://docs.moonbitlang.com/en/latest/language/index.html): Introduction to detailed language specifications
 - [**Standard library**](https://mooncakes.io/docs/moonbitlang/core/): documentation of the standard library `moonbitlang/core`
-- [**Toolchains**](toolchain/index.md): Introduction to all the toolchains making developing MoonBit a unique experience.
-- [**MoonPilot**](pilot/index.md): Introduction to MoonBit's code agent.
+- [**Toolchains**](https://docs.moonbitlang.com/en/latest/toolchain/index.html): Introduction to all the toolchains making developing MoonBit a unique experience.
 
 ## Useful Sources
 
@@ -20,5 +19,6 @@ The IDE environment is available at [https://try.moonbitlang.com](https://try.mo
   - [Updates](https://www.moonbitlang.com/weekly-updates/): Changelogs to language features
 - [Document (this site)](https://docs.moonbitlang.com/en/): The complete and up to date document for MoonBit, including the sections mentioned before
 - [Tour](https://tour.moonbitlang.com): Interactive language playground
+- [MoonBit Skills](https://github.com/moonbitlang/skills): Install skills from this repository before using MoonBit code agents.
 - [mooncakes.io](https://mooncakes.io): Package registry along with API documents, including:
   - [Experimental library API](https://mooncakes.io/docs/moonbitlang/x/)

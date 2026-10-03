@@ -37,10 +37,11 @@ Before implementing `let` (and the more complex `letrec`), we first need to modi
 The adjustment is done in the implementation of the `Unwind` instruction. If the supercombinator has no parameters, it is the same as the original unwind. When there are parameters, the top address of the supercombinator node is discarded, and the `rearrange` function is called.
 
 ```moonbit
+
 fn GState::rearrange(self : GState, n : Int) -> Unit {
   let appnodes = self.stack.take(n)
   let args = appnodes.map(fn(addr) {
-    guard self.heap[addr] is NApp(_, arg)
+    guard! self.heap[addr] is NApp(_, arg)
     arg
   })
   self.stack = args + appnodes.drop(n - 1)
@@ -52,6 +53,7 @@ The `rearrange` function assumes that the first N addresses on the stack point t
 After this, both parameters and local variables can be accessed using the same command by changing the `PushArg` instruction to a more general `Push` instruction.
 
 ```moonbit
+
 fn GState::push(self : GState, offset : Int) -> Unit {
   // Push(n) a0 : . . . : an : s
   //     =>  an : a0 : . . . : an : s
@@ -70,7 +72,7 @@ The next issue is that we need something to clean up. Consider the following exp
 
 After constructing the graph corresponding to the expression `expr`, the stack still contains addresses pointing to e1 and e2 (corresponding to variables x1 and x2), as shown below (the stack grows from bottom to top):
 
-```default
+```none
 <Address pointing to expr>
        |
 <Address pointing to x2>
@@ -83,6 +85,7 @@ After constructing the graph corresponding to the expression `expr`, the stack s
 Therefore, we need a new instruction to clean up these no longer needed addresses. It is called `Slide`. As the name suggests, the function of `Slide(n)` is to skip the first address and delete the following N addresses.
 
 ```moonbit
+
 fn GState::slide(self : GState, n : Int) -> Unit {
   let addr = self.pop1()
   self.stack = self.stack.drop(n).prepend(addr)
@@ -97,23 +100,26 @@ fn compileLet(
   comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction],
   defs : List[(String, RawExpr[String])],
   expr : RawExpr[String],
-  env : List[(String, Int)]
+  env : List[(String, Int)],
 ) -> List[Instruction] {
-  let (env, codes) = loop (env, @list.empty(), defs) {
-    (env, acc, Empty) => (env, acc)
-    (env, acc, More((name, expr), tail=rest)) => {
-      let code = expr.compileC(env)
-      let env = argOffset(1, env).prepend((name, 0))
-      continue (env, acc + code, rest)
+  let (env, codes) = for env = env, acc = @list.empty(), remaining = defs {
+    match remaining {
+      Empty => break (env, acc)
+      More((name, expr), tail=rest) => {
+        let code = expr.compileC(env)
+        let env = argOffset(1, env).prepend((name, 0))
+        continue env, acc + code, rest
+      }
     }
   }
-  codes + comp(expr, env) + @list.from_array([Slide(defs.length())])
+  codes + comp(expr, env) + @list.List([Slide(defs.length())])
 }
 ```
 
 The semantics of `letrec` are more complex - it allows the N variables within the expression to reference each other, so we need to pre-allocate N addresses and place them on the stack. We need a new instruction: `Alloc(N)`, which pre-allocates N `NInd` nodes and pushes the addresses onto the stack sequentially. The addresses in these indirect nodes are negative and only serve as placeholders.
 
 ```moonbit
+
 fn GState::alloc_nodes(self : GState, n : Int) -> Unit {
   let dummynode : Node = NInd(Addr(-1))
   for i = 0; i < n; i = i + 1 {
@@ -135,25 +141,28 @@ fn compileLetrec(
   comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction],
   defs : List[(String, RawExpr[String])],
   expr : RawExpr[String],
-  env : List[(String, Int)]
+  env : List[(String, Int)],
 ) -> List[Instruction] {
   let mut env = env
-  loop defs {
-    Empty => ()
-    More((name, _), tail=rest) => {
-      env = argOffset(1, env).prepend((name, 0))
-      continue rest
+  for remaining = defs {
+    match remaining {
+      Empty => break
+      More((name, _), tail=rest) => {
+        env = argOffset(1, env).prepend((name, 0))
+        continue rest
+      }
     }
   }
   let n = defs.length()
   fn compileDefs(
     defs : List[(String, RawExpr[String])],
-    offset : Int
+    offset : Int,
   ) -> List[Instruction] {
     match defs {
-      Empty => comp(expr, env) + @list.from_array([Slide(n)])
+      Empty => comp(expr, env) + @list.List([Slide(n)])
       More((_, expr), tail=rest) =>
-        expr.compileC(env) + compileDefs(rest, offset - 1).prepend(Update(offset))
+        expr.compileC(env) +
+        compileDefs(rest, offset - 1).prepend(Update(offset))
     }
   }
 
@@ -211,17 +220,19 @@ The implementation of the `Eval` instruction is not complicated:
 
 > This is similar to how strict evaluation languages handle saving caller contexts, but practical implementations would use more efficient methods.
 ```moonbit
+
 fn GState::eval(self : GState) -> Unit {
   let addr = self.pop1()
   self.put_dump(self.code, self.stack)
-  self.stack = @list.from_array([addr])
-  self.code = @list.from_array([Unwind])
+  self.stack = @list.List([addr])
+  self.code = @list.List([Unwind])
 }
 ```
 
 This simple definition requires modifying the `Unwind` instruction to restore the context when `Unwind` in the `NNum` branch finds that there is a recoverable context (`dump` is not empty).
 
 ```moonbit
+
 fn GState::unwind(self : GState) -> Unit {
   let addr = self.pop1()
   match self.heap[addr] {
@@ -238,7 +249,7 @@ fn GState::unwind(self : GState) -> Unit {
     NApp(a1, _) => {
       self.put_stack(addr)
       self.put_stack(a1)
-      self.put_code(@list.from_array([Unwind]))
+      self.put_code(@list.List([Unwind]))
     }
     NGlobal(_, n, c) =>
       if self.stack.length() < n {
@@ -253,7 +264,7 @@ fn GState::unwind(self : GState) -> Unit {
       }
     NInd(a) => {
       self.put_stack(a)
-      self.put_code(@list.from_array([Unwind]))
+      self.put_code(@list.List([Unwind]))
     }
   }
 }
@@ -262,6 +273,7 @@ fn GState::unwind(self : GState) -> Unit {
 Next, we need to implement arithmetic and comparison instructions. We use two functions to simplify the form of binary operations. The result of the comparison instruction is a boolean value, and for simplicity, we use numbers to represent it: 0 for `false`, 1 for `true`.
 
 ```moonbit
+
 fn GState::negate(self : GState) -> Unit {
   let addr = self.pop1()
   match self.heap[addr] {
@@ -270,7 +282,9 @@ fn GState::negate(self : GState) -> Unit {
       self.put_stack(addr)
     }
     otherwise =>
-      abort("negate: wrong kind of node \{otherwise}, address \{addr}")
+      abort(
+        "negate: wrong kind of node \{@debug.to_string(otherwise)}, address \{@debug.to_string(addr)}",
+      )
   }
 }
 
@@ -282,7 +296,10 @@ fn GState::lift_arith2(self : GState, op : (Int, Int) -> Int) -> Unit {
       let addr = self.heap.alloc(newnode)
       self.put_stack(addr)
     }
-    (node1, node2) => abort("liftArith2: \{a1} = \{node1} \{a2} = \{node2}")
+    (node1, node2) =>
+      abort(
+        "liftArith2: \{@debug.to_string(a1)} = \{@debug.to_string(node1)} \{@debug.to_string(a2)} = \{@debug.to_string(node2)}",
+      )
   }
 }
 
@@ -295,7 +312,10 @@ fn GState::lift_cmp2(self : GState, op : (Int, Int) -> Bool) -> Unit {
       let addr = self.heap.alloc(newnode)
       self.put_stack(addr)
     }
-    (node1, node2) => abort("liftCmp2: \{a1} = \{node1} \{a2} = \{node2}")
+    (node1, node2) =>
+      abort(
+        "liftCmp2: \{@debug.to_string(a1)} = \{@debug.to_string(node1)} \{@debug.to_string(a2)} = \{@debug.to_string(node2)}",
+      )
   }
 }
 ```
@@ -303,10 +323,11 @@ fn GState::lift_cmp2(self : GState, op : (Int, Int) -> Bool) -> Unit {
 Finally, implement branching:
 
 ```moonbit
+
 fn GState::condition(
   self : GState,
   i1 : List[Instruction],
-  i2 : List[Instruction]
+  i2 : List[Instruction],
 ) -> Unit {
   let addr = self.pop1()
   match self.heap[addr] {
@@ -316,7 +337,8 @@ fn GState::condition(
     NNum(1) =>
       // true
       self.code = i1 + self.code
-    otherwise => abort("cond : \{addr} = \{otherwise}")
+    otherwise =>
+      abort("cond : \{@debug.to_string(addr)} = \{@debug.to_string(otherwise)}")
   }
 }
 ```
@@ -324,12 +346,12 @@ fn GState::condition(
 No major adjustments are needed in the compilation part, just add some predefined programs:
 
 ```moonbit
-let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_array([
+let compiled_primitives : List[(String, Int, List[Instruction])] = @list.List([
     // Arith
     (
       "add",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -343,7 +365,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "sub",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -357,7 +379,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "mul",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -371,7 +393,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "div",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -386,7 +408,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "eq",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -400,7 +422,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "neq",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -414,7 +436,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "ge",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -428,7 +450,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "gt",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -442,7 +464,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "le",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -456,7 +478,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "lt",
       2,
-      @list.from_array([
+      @list.List([
         Push(1),
         Eval,
         Push(1),
@@ -471,15 +493,15 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = @list.from_ar
     (
       "negate",
       1,
-      @list.from_array([Push(0), Eval, Neg, Update(1), Pop(1), Unwind]),
+      @list.List([Push(0), Eval, Neg, Update(1), Pop(1), Unwind]),
     ),
     (
       "if",
       3,
-      @list.from_array([
+      @list.List([
         Push(0),
         Eval,
-        Cond(@list.from_array([Push(1)]), @list.from_array([Push(2)])),
+        Cond(@list.List([Push(1)]), @list.List([Push(2)])),
         Update(3),
         Pop(3),
         Unwind,
@@ -495,7 +517,7 @@ and modify the initial instruction sequence
 let initialState : GState = {
   heap,
   stack: @list.empty(),
-  code: @list.from_array([PushGlobal("main"), Eval]),
+  code: @list.List([PushGlobal("main"), Eval]),
   globals,
   stats: 0,
   dump: @list.empty(),

@@ -12,18 +12,27 @@ MoonBit provides the test code block for writing inline test cases. For example:
 test "test_name" {
   assert_eq(1 + 1, 2)
   assert_eq(2 + 2, 4)
-  inspect([1, 2, 3], content="[1, 2, 3]")
+  debug_inspect([1, 2, 3], content="[1, 2, 3]")
 }
 ```
 
-A test code block is essentially a function that returns a `Unit` but may throws an [`Error`](error-handling.md#error-types), or `Unit!Error` as one would see in its signature at the position of return type. It is called during the execution of `moon test` and outputs a test report through the build system. The `assert_eq` function is from the standard library; if the assertion fails, it prints an error message and terminates the test. The string `"test_name"` is used to identify the test case and is optional.
+A test code block is essentially a function with type
+`() -> Unit raise Error`: it returns `Unit` and may raise an
+[`Error`](https://docs.moonbitlang.com/en/latest/language/error-handling.html#error-types). It is called during the
+execution of `moon test` and outputs a test report through the build system.
+The `assert_eq` function is from the standard library; if the assertion fails,
+it prints an error message and terminates the test. The string `"test_name"`
+is used to identify the test case and is optional.
+
+Tests started by `moon test` use the module root as their current working
+directory. Resolve relative paths used by tests from the module root, rather
+than from the package directory or the directory containing the test file.
 
 If a test name starts with `"panic"`, it indicates that the expected behavior of the test is to trigger a panic, and the test will only pass if the panic is triggered. For example:
 
 ```moonbit
 test "panic_test" {
   let _ : Int = Option::None.unwrap()
-
 }
 ```
 
@@ -41,10 +50,12 @@ The labelled argument `content` can be omitted as `moon test --update` will inse
 ```moonbit
 struct X {
   x : Int
-} derive(Show)
+} derive(Debug)
+
+pub extend X with Debug::{to_repr}
 
 test "show snapshot test" {
-  inspect({ x: 10 }, content="{x: 10}")
+  debug_inspect({ x: 10 }, content="{ x: 10 }")
 }
 ```
 
@@ -58,7 +69,11 @@ The solution is to use `@json.inspect(x, content=x)`. The benefit is that the re
 enum Rec {
   End
   Really_long_name_that_is_difficult_to_read(Rec)
-} derive(Show, ToJson)
+} derive(Debug, ToJson)
+
+pub extend Rec with Debug::{to_repr}
+
+pub extend Rec with ToJson::{to_json}
 
 test "json snapshot test" {
   let r = Really_long_name_that_is_difficult_to_read(
@@ -66,7 +81,7 @@ test "json snapshot test" {
       Really_long_name_that_is_difficult_to_read(End),
     ),
   )
-  inspect(
+  debug_inspect(
     r,
     content="Really_long_name_that_is_difficult_to_read(Really_long_name_that_is_difficult_to_read(Really_long_name_that_is_difficult_to_read(End)))",
   )
@@ -98,7 +113,7 @@ test "record anything" (t : @test.Test) {
 
 This will create a file under `__snapshot__` of that package with the given filename:
 
-```default
+```none
 Hello, world! And hello, MoonBit!
 ```
 
@@ -113,6 +128,6 @@ When developing libraries, it is important to verify if the user can use it corr
 - A test that has access to all the members in a package is called a WhiteBox tests as we can see everything. Such tests can be defined inline or defined in a file whose name ends with `_wbtest.mbt`.
 - A test that has access only to the public members in a package is called a BlackBox tests. Such tests need to be defined in a file whose name ends with `_test.mbt`.
 
-The WhiteBox test files (`_wbtest.mbt`) imports the packages defined in the `import` and `wbtest-import` sections of the package configuration (`moon.pkg.json`).
+The WhiteBox test files (`_wbtest.mbt`) imports the packages defined in the `import` and `wbtest-import` sections of the package configuration (`moon.pkg`, or legacy `moon.pkg.json`).
 
-The BlackBox test files (`_test.mbt`) imports the current package and the packages defined in the `import` and `test-import` sections of the package configuration (`moon.pkg.json`).
+The BlackBox test files (`_test.mbt`) imports the current package and the packages defined in the `import` and `test-import` sections of the package configuration (`moon.pkg`, or legacy `moon.pkg.json`).

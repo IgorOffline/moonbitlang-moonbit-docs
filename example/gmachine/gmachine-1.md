@@ -8,7 +8,7 @@ Higher-order functions such as `map` and `filter` often serve as many people's f
 
 To enhance code efficiency, some propose leveraging compiler optimizations based on recurring patterns within higher-order functions. For instance, by rewriting `map(f, map(g, list))` as：
 
-```default
+```moonbit
 map(fn (x) { f(g(x)) }, list)
 ```
 
@@ -19,7 +19,7 @@ Lazy evaluation is a technique that can reduce unnecessary costs to some extent 
 Let's first explore how lazy lists (`Stream`) can avoid multiple traversals in such cases.
 
 #### NOTE
-The `List[T]` here is a `typealias` of `@list.List[T]`
+The `List[T]` here is a type alias of `@list.List[T]`.
 
 ## Lazy List Implementation
 
@@ -110,20 +110,24 @@ enum RawExpr[T] {
   App(RawExpr[T], RawExpr[T])
   Let(Bool, List[(T, RawExpr[T])], RawExpr[T]) // isRec, Defs, Body
   Case(RawExpr[T], List[(Int, List[T], RawExpr[T])])
-} derive(Show)
+} derive(Debug)
+
+pub extend RawExpr with @moonbitlang/core/debug.Debug::{to_repr}
 
 struct ScDef[T] {
   name : String
   args : List[T]
   body : RawExpr[T]
-} derive(Show)
+} derive(Debug)
+
+pub extend ScDef with @moonbitlang/core/debug.Debug::{to_repr}
 ```
 
 Additionally, some predefined coreF programs are required.
 
 ```moonbit
 let prelude_defs : List[ScDef[String]] = {
-  let args : (FixedArray[String]) -> List[String] = @list.from_array(_)
+  let args : (FixedArray[String]) -> List[String] = x => @list.List(x)
   let id = ScDef::new("I", args(["x"]), Var("x")) // id x = x
   let k = ScDef::new("K", args(["x", "y"]), Var("x")) // K x y = x
   let k1 = ScDef::new("K1", args(["x", "y"]), Var("y")) // K1 x y = y
@@ -142,7 +146,7 @@ let prelude_defs : List[ScDef[String]] = {
     args(["f"]),
     App(App(Var("compose"), Var("f")), Var("f")),
   ) // twice f = compose f f
-  @list.from_array([id, k, k1, s, compose, twice])
+  @list.List([id, k, k1, s, compose, twice])
 }
 ```
 
@@ -227,7 +231,7 @@ Before delving into how graph reduction works, let's establish some key terms an
 
 So, the graph reduction can be described with the following pseudocode:
 
-```default
+```none
 While there exist reducible expressions in the graph {
     Select the outermost reducible expression.
     Reduce the expression.
@@ -315,10 +319,14 @@ In this simple version of the G-Machine, the state includes:
 
 - Heap: This is where the expression graph and the sequences of instructions corresponding to super combinators are stored.
   ```moonbit
-  // Use the struct tuple to encapsulate an address type.
-  struct Addr(Int) derive(Eq, Show)
+  /// Use the struct tuple to encapsulate an address type.
+  struct Addr(Int) derive(Eq, Debug)
 
-  // Describe graph nodes with an enumeration type.
+  pub extend Addr with Eq::{not_equal, equal}
+
+  pub extend Addr with @moonbitlang/core/debug.Debug::{to_repr}
+
+  /// Describe graph nodes with an enumeration type.
   enum Node {
     NNum(Int)
     // The application node
@@ -328,7 +336,11 @@ In this simple version of the G-Machine, the state includes:
     NGlobal(String, Int, List[Instruction])
     // The Indirection node. The key component of implementing lazy evaluation
     NInd(Addr)
-  } derive(Eq, Show)
+  } derive(Eq, Debug)
+
+  pub extend Node with Eq::{not_equal, equal}
+
+  pub extend Node with @moonbitlang/core/debug.Debug::{to_repr}
 
   struct GHeap {
     // The heap uses an array, 
@@ -337,7 +349,7 @@ In this simple version of the G-Machine, the state includes:
     memory : Array[Node?]
   }
 
-  // Allocate heap space for nodes.
+  /// Allocate heap space for nodes.
   fn GHeap::alloc(self : GHeap, node : Node) -> Addr {
     let heap = self
     fn next(n : Int) -> Int {
@@ -352,7 +364,7 @@ In this simple version of the G-Machine, the state includes:
     }
 
     let mut i = heap.object_count
-    while not(free(i)) {
+    while !free(i) {
       i = next(i)
     }
     heap.memory[i] = Some(node)
@@ -425,6 +437,7 @@ All of these tasks have corresponding instruction implementations.
 The highly simplified G-Machine currently consists of 7 instructions.
 
 ```moonbit
+
 enum Instruction {
   Unwind
   PushGlobal(String)
@@ -433,7 +446,11 @@ enum Instruction {
   MkApp
   Update(Int)
   Pop(Int)
-} derive(Eq, Show)
+} derive(Eq, Debug)
+
+pub extend Instruction with Eq::{not_equal, equal}
+
+pub extend Instruction with @moonbitlang/core/debug.Debug::{to_repr}
 ```
 
 The `PushInt` instruction is the simplest. It allocates an `NNum` node on the heap and pushes its address onto the stack.
@@ -465,7 +482,7 @@ fn GState::push_arg(self : GState, offset : Int) -> Unit {
     NApp(_, arg) => arg
     otherwise =>
       abort(
-        "pusharg: stack offset \{offset} address \{appaddr} node \{otherwise}",
+        "pusharg: stack offset \{offset} address \{@debug.to_string(appaddr)} node \{@debug.to_string(otherwise)}",
       )
   }
   self.put_stack(arg)
@@ -507,7 +524,7 @@ fn GState::unwind(self : GState) -> Unit {
     NApp(a1, _) => {
       self.put_stack(addr)
       self.put_stack(a1)
-      self.put_code(@list.from_array([Unwind]))
+      self.put_code(@list.List([Unwind]))
     }
     NGlobal(_, n, c) =>
       if self.stack.length() < n {
@@ -518,7 +535,7 @@ fn GState::unwind(self : GState) -> Unit {
       }
     NInd(a) => {
       self.put_stack(a)
-      self.put_code(@list.from_array([Unwind]))
+      self.put_code(@list.List([Unwind]))
     }
   }
 }
@@ -571,9 +588,9 @@ fn RawExpr::compileR(
   arity : Int
 ) -> List[Instruction] {
   if arity == 0 {
-    self.compileC(env) + @list.from_array([Update(arity), Unwind])
+    self.compileC(env) + @list.List([Update(arity), Unwind])
   } else {
-    self.compileC(env) + @list.from_array([Update(arity), Pop(arity), Unwind])
+    self.compileC(env) + @list.List([Update(arity), Pop(arity), Unwind])
   }
 }
 ```
@@ -588,14 +605,14 @@ fn RawExpr::compileC(
   match self {
     Var(s) =>
       match env.lookup(s) {
-        None => @list.from_array([PushGlobal(s)])
-        Some(n) => @list.from_array([PushArg(n)])
+        None => @list.List([PushGlobal(s)])
+        Some(n) => @list.List([PushArg(n)])
       }
-    Num(n) => @list.from_array([PushInt(n)])
+    Num(n) => @list.List([PushInt(n)])
     App(e1, e2) =>
       e2.compileC(env) +
       e1.compileC(argOffset(1, env)) +
-      @list.from_array([MkApp])
+      @list.List([MkApp])
     _ => abort("not support yet")
   }
 }
@@ -607,16 +624,18 @@ Once the super combinators are compiled, they need to be placed on the heap (alo
 
 ```moonbit
 fn build_initial_heap(
-  scdefs : List[(String, Int, List[Instruction])]
+  scdefs : List[(String, Int, List[Instruction])],
 ) -> (GHeap, @hashmap.HashMap[String, Addr]) {
   let heap = { object_count: 0, memory: Array::make(10000, None) }
-  let globals = @hashmap.new(capacity=50)
-  loop scdefs {
-    Empty => ()
-    More((name, arity, instrs), tail=rest) => {
-      let addr = heap.alloc(NGlobal(name, arity, instrs))
-      globals[name] = addr
-      continue rest
+  let globals = @hashmap.HashMap([], capacity=50)
+  for scdefs = scdefs {
+    match scdefs {
+      Empty => break
+      More((name, arity, instrs), tail=rest) => {
+        let addr = heap.alloc(NGlobal(name, arity, instrs))
+        globals[name] = addr
+        continue rest
+      }
     }
   }
   return (heap, globals)
@@ -660,7 +679,7 @@ fn GState::reify(self : GState) -> Node {
         let res = self.heap[addr]
         return res
       }
-      _ => abort("wrong stack \{stack}")
+      _ => abort("wrong stack \{@debug.to_string(stack)}")
     }
   }
 }
@@ -674,7 +693,7 @@ fn run(codes : List[String]) -> Node {
     let tokens = tokenize(code)
     let code = try tokens.parse_sc() catch {
       ParseError(s) => abort(s)
-    } else {
+    } noraise {
       expr => expr
     }
     let code = code.compileSC()
@@ -686,7 +705,7 @@ fn run(codes : List[String]) -> Node {
   let initialState : GState = {
     heap,
     stack: @list.empty(),
-    code: @list.from_array([PushGlobal("main"), Unwind]),
+    code: @list.List([PushGlobal("main"), Unwind]),
     globals,
     stats: 0,
   }

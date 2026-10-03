@@ -4,9 +4,8 @@ Sudoku is a logic-based puzzle game that originated in 1979. It was well-suited
 for print media like newspapers, and even in the digital age, many Sudoku game
 programs are available for computers and smartphones. Despite the variety of
 entertainment options today, Sudoku enthusiasts continue to form active
-communities (online forum such as:
-[enjoysudoku](http://forum.enjoysudoku.com/)). This article will demonstrate how
-to write a suitable program to solve Sudoku using MoonBit.
+online communities. This article will demonstrate how to write a suitable
+program to solve Sudoku using MoonBit.
 ![sudoku example](imgs/sudoku.jpg)
 
 ## Squares, Units, and Peers
@@ -16,7 +15,7 @@ top to bottom as A-I, and the columns from left to right as 1-9. This gives each
 square in the grid a coordinate, for example, the square containing the number 0
 in the grid below has the coordinate C3.
 
-```default
+```none
   1 2 3 4 5 6 7 8 9
 A . . . . . . . . .
 B . . . . . . . . .
@@ -33,7 +32,7 @@ This 9x9 grid has a total of 9 units, and each unit contains squares that must
 have unique digits from 1 to 9. However, in the initial state of the game, most
 squares do not contain any digits.
 
-```default
+```none
  4  1  7 | 3  6  9 | 8  2  5
  6  3  2 | 1  5  8 | 9  4  7
  9  5  8 | 7  2  4 | 3  1  6
@@ -51,7 +50,7 @@ Beyond the units, another important concept is peers. A square's peers include
 other squares in the same row, column, and unit. For example, the peers of C2
 include these squares:
 
-```default
+```none
     A2   |         |
     B2   |         |
     C2   |         |
@@ -117,8 +116,8 @@ test {
 ```
 
 Then we wrap the array and provide operations for creating, accessing, assigning
-values to specific coordinates, and copying `Grid[T]`. By overloading the op_get
-and op_set methods, we can write convenient code like `table["A2"]` and
+values to specific coordinates, and copying `Grid[T]`. By attaching indexing
+aliases to the access methods, we can write convenient code like `table["A2"]` and
 `table["C3"] = ...`.
 
 ```moonbit
@@ -189,7 +188,7 @@ We use a string to represent the initial Sudoku grid. Various formats are
 acceptable; both `.` and `0` represent empty squares, and other characters like
 spaces and newlines are ignored.
 
-```default
+```none
 #|400000805
 #|030000000
 #|000700000
@@ -219,8 +218,8 @@ initially set the content of all squares to
 `['1', '2', '3', '4', '5', '6', '7', '8', '9']` (a List).
 
 ```moonbit
-fn Grid::parse(s : String) -> Grid[@immut/sorted_set.T[Char]] {
-  let digits = @immut/sorted_set.from_array(cols.to_array())
+fn Grid::parse(s : String) -> Grid[@immut/sorted_set.SortedSet[Char]] {
+  let digits = @immut/sorted_set.SortedSet(cols.to_array())
   let values = Grid::new(digits)
   ...
 }
@@ -232,7 +231,7 @@ where `key` is a string like `A6` and `val` is a character. It is easy to write
 such code.
 
 ```moonbit
-fn assign(values : Grid[@immut/sorted_set.T[Char]], key : String, val : Char) -> Unit {
+fn assign(values : Grid[@immut/sorted_set.SortedSet[Char]], key : String, val : Char) -> Unit {
   values[key] = @immut/sorted_set.singleton(val)
 }
 ```
@@ -265,7 +264,7 @@ fn eliminate(
   key : String,
   val : Char
 ) -> Bool {
-  if not(values[key].contains(val)) {
+  if !(values[key].contains(val)) {
     return true
   }
   values[key] = values[key].remove(val)
@@ -277,7 +276,7 @@ fn eliminate(
       for key in peers[key] {
         res = res && eliminate(values, key, val)
       }
-      if not(res) {
+      if !res {
         return res
       }
     }
@@ -379,7 +378,7 @@ backtracking troublesome, we directly copy values each time we assign a value.
 fn search(
   values : Grid[@sorted_set.SortedSet[Char]],
 ) -> Grid[@sorted_set.SortedSet[Char]]? {
-  if values.contains(fn(digits) { not(digits.length() == 1) }) {
+  if values.contains(fn(digits) { !(digits.length() == 1) }) {
     let mut minsq = ""
     let mut n = 10
     for sq in squares {
@@ -400,7 +399,7 @@ fn search(
           Some(v) => return Some(v)
         }
       }
-    } else {
+    } nobreak {
       return None
     }
   } else {
@@ -454,8 +453,8 @@ test {
 }
 ```
 
-Running on [MoonBit online IDE](https://try.moonbitlang.com/), It takes only
-about 0.11 seconds to solve this Sudoku!
+On a regular development machine, it takes only about 0.11 seconds to solve
+this Sudoku.
 
 ## Conclusion
 
@@ -468,5 +467,4 @@ not be overly concerned with an unsolvable Sudoku puzzle.
 
 Let's play with MoonBit with ease!
 
-This tutorial references Norvig's blog:
-[http://norvig.com/sudoku.html](http://norvig.com/sudoku.html)
+This tutorial references Peter Norvig's Sudoku-solving write-up.

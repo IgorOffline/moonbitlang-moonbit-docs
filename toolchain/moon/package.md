@@ -4,82 +4,205 @@ moon uses a package file to identify and describe a package. The legacy format
 is `moon.pkg.json`, and the new format is `moon.pkg`. For full JSON schema,
 please check [moon's repository](https://github.com/moonbitlang/moon/blob/main/crates/moonbuild/template/pkg.schema.json).
 
+Support for `moon.pkg.json` is deprecated. New projects should use `moon.pkg`;
+existing JSON configuration can be migrated with `moon fmt` as described
+below.
+
 ## New format (`moon.pkg`)
 
 The new format is a concise DSL. You can generate or reformat it from an
 existing `moon.pkg.json` with:
 
 ```bash
-NEW_MOON_PKG=1 moon fmt -C <module_dir>
+moon -C <module_dir> fmt
 ```
 
 Example:
 
-```text
+```moonbit
 import {
   "moonbit-community/language/packages/virtual",
 }
 
+pkgtype(kind: "executable")
+
 options(
-  "is-main": true,
   overrides: [ "moonbit-community/language/packages/implement" ],
 )
 ```
 
-### Import and options
-
 In `moon.pkg`, dependencies are declared in an `import { ... }` block. Use
-`as @alias` to set a custom alias:
+`@alias` to set a custom alias:
 
-```text
+```moonbit
 import {
   "moonbit-community/language/packages/pkgA",
-  "moonbit-community/language/packages/pkgC" as @c,
+  "moonbit-community/language/packages/pkgC" @c,
   "moonbitlang/core/builtin",
 }
 ```
 
-All other fields from `moon.pkg.json` move into a single `options(...)` block.
-The key names and value shapes are unchanged; keys that contain `-` must be
-quoted.
+Most fields from `moon.pkg.json` can be represented in an `options(...)` block.
+Stable declarations such as `formatter` and `pkgtype` have dedicated top-level
+forms. Legacy keys that contain `-` must be quoted when they are used inside
+`options`.
 
-```text
+```moonbit
 options(
-  virtual: { "has-default": true },
+  "virtual": { "has-default": true },
 )
+```
+
+The `moon.pkg` format allows comments `//...`.
+
+Full syntax of `moon.pkg` is as follows:
+
+```none
+moon_pkg ::= statement*
+statement ::= import | assign | apply
+
+import ::= "import" "{" (import_item ",")* import_item? "}" import_kind?
+import_item ::= STRING ("@" PKG_NAME)?
+import_kind ::= "for" STRING
+
+assign ::= LIDENT "=" expr
+
+apply ::= LIDENT "(" (argument ",")* argument? ")"
+argument ::= LIDENT ":" expr | STRING ":" expr  
+
+expr ::= array | object | apply | STRING | INT | "true" | "false"
+array ::= "[" (expr ",")* expr? "]"
+object ::= "{" (field ",")* field? "}"
 ```
 
 ## Name
 
 The package name is not configurable; it is determined by the directory name of the package.
 
-## is-main
+## Formatter
 
-The `is-main` field is used to specify whether a package needs to be linked into an executable file.
+The `formatter` field configures `moon fmt` for this package. Currently it
+supports `ignore`, a list of file names that the formatter should skip.
+
+This is useful for generated files or files that you intentionally keep in a
+different format. Files produced by `pre-build` are already skipped
+automatically, so `formatter.ignore` is mainly for additional files you want to
+exclude.
+
+### moon.pkg
+
+```moonbit
+formatter(ignore: ["generated.mbt", "snapshot.mbt"])
+```
+
+### moon.pkg.json
+
+```json
+{
+  "formatter": {
+    "ignore": ["generated.mbt", "snapshot.mbt"]
+  }
+}
+```
+
+## Package type
+
+Use one `pkgtype` declaration to specify what a package builds. For example, an
+executable package uses:
+
+```moonbit
+pkgtype(kind: "executable")
+```
+
+The available kinds are `library`, `executable`, and `foreign_library`.
+`library` is the default. `executable` replaces the legacy
+`options("is-main": true)`, while `foreign_library` replaces the legacy
+`options(link: true)`. These kinds are alternatives and must not be declared
+together.
+
+In a foreign-library package, `#export_name` assigns a stable symbol name to a
+public, non-generic function in generated Wasm, JavaScript, or C output:
+
+```moonbit
+#export_name("attr_add")
+pub fn add_by_attr(n : Int) -> Int {
+  n + 42
+}
+```
+
+MoonBit currently requires export names to be valid C symbol identifiers and
+unique within the package, regardless of the selected backend.
+
+#### WARNING
+Known compiler issue: `#export_name` currently applies its C-symbol-identifier
+restriction to every backend. WebAssembly export names are UTF-8 strings and
+are not limited to C identifiers.
+
+The attribute cannot be used on generic functions or functions with optional
+arguments. Prefer `#export_name` over backend-specific `exports` link
+configuration for new exports.
+
+Export declarations are scoped to the package that produces the artifact. An
+attribute or `exports` configuration in a dependency applies when that
+dependency is built as its own artifact, but it does not add symbols to a
+downstream package's artifact. Define and export a wrapper in the exporting
+package to expose dependency functionality.
+
+#### NOTE
+The native backend does not currently support exporting a `foreign_library`
+package as a linkable library artifact, including shared libraries such as a
+`.dll` or `.so`.
+
+<a id="is-main"></a>
+
+## is-main (deprecated)
+
+The `is-main` field is deprecated. It is still accepted for compatibility with
+existing package files, but new and migrated `moon.pkg` files should use
+`pkgtype(kind: "executable")` instead. The following legacy declarations are
+equivalent to that `pkgtype` declaration:
 
 The output of the linking process depends on the backend. When this field is set to `true`:
 
 - For the Wasm and `wasm-gc` backends, a standalone WebAssembly module will be generated.
 - For the `js` backend, a standalone JavaScript file will be generated.
 
+### moon.pkg
+
+```moonbit
+options(
+  "is-main": true,
+)
+```
+
+### moon.pkg.json
+
+```json
+{
+  "is-main": true
+}
+```
+
 ## Importing dependencies
 
-### import
+### Import
 
 The `import` field is used to specify other packages that a package depends on.
 
 For example, the following imports `pkgA` and `pkgC`, aliasing `pkgC` to `c`.
 User can write `@c` to access definitions from `pkgC`.
 
-In `moon.pkg`, the equivalent is:
+### moon.pkg
 
-```text
+```moonbit
 import {
   "moonbit-community/language/packages/pkgA",
-  "moonbit-community/language/packages/pkgC" as @c,
+  "moonbit-community/language/packages/pkgC" @c,
   "moonbitlang/core/builtin",
 }
 ```
+
+### moon.pkg.json
 
 ```json
 {
@@ -94,21 +217,94 @@ import {
 }
 ```
 
-Core packages are not special here: if you use `@json`, `@test`, or other core
-aliases, add the corresponding `moonbitlang/core/...` package to `import` to
-avoid `core_package_not_imported` warnings.
+Most core packages are not special here: if you use `@json`, `@test`, or other
+ordinary core aliases, add the corresponding `moonbitlang/core/...` package to
+`import` to avoid `core_package_not_imported` warnings.
 
-### test-import
+`prelude` is the exception. It is available by default, so the names it exposes
+do not need an explicit package import.
 
-The `test-import` field is used to specify other packages that the black-box test package of this package depends on,
+### Test import
+
+The test import is used to specify other packages that the black-box test package of this package depends on,
 with the same format as `import`.
+
+### moon.pkg
+
+```moonbit
+import {
+  "path/to/package1",
+  "path/to/package2" @pkg2,
+} for "test"
+```
+
+### moon.pkg.json
+
+```json
+{
+  "test-import": {
+    "path/to/package1",
+    {
+      "path": "path/to/package2",
+      "alias": "pkg2"
+    }
+  }
+}
+```
 
 The `test-import-all` field is used to specify whether all public definitions from the package being tested should be imported (`true`) by default.
 
-### wbtest-import
+### White-box test import
 
-The `wbtest-import` field is used to specify other packages that the white-box test package of this package depends on,
+The white-box test import is used to specify other packages that the white-box test package of this package depends on,
 with the same format as `import`.
+
+### moon.pkg
+
+```moonbit
+import {
+  "path/to/package1",
+  "path/to/package2" @pkg2,
+} for "wbtest"
+```
+
+### moon.pkg.json
+
+```json
+{
+  "wbtest-import": {
+    "path/to/package1",
+    {
+      "path": "path/to/package2",
+      "alias": "pkg2"
+    }
+  }
+}
+```
+
+## Maximum Concurrent Tests
+
+The `max-concurrent-tests` field limits how many tests from this package may
+run at the same time when `moon test` executes the package.
+
+This is useful when tests in the same package share ports, temporary files, or
+other external resources that should not all run in parallel.
+
+### moon.pkg
+
+```moonbit
+options(
+  "max-concurrent-tests": 2,
+)
+```
+
+### moon.pkg.json
+
+```json
+{
+  "max-concurrent-tests": 2
+}
+```
 
 ## Conditional Compilation
 
@@ -129,6 +325,27 @@ If a file is not listed in `"targets"`, it will be compiled under all conditions
 
 Example:
 
+### moon.pkg
+
+```moonbit
+options(
+  targets: {
+    "only_js.mbt": ["js"],
+    "only_wasm.mbt": ["wasm"],
+    "only_wasm_gc.mbt": ["wasm-gc"],
+    "all_wasm.mbt": ["wasm", "wasm-gc"],
+    "not_js.mbt": ["not", "js"],
+    "only_debug.mbt": ["debug"],
+    "js_and_release.mbt": ["and", ["js"], ["release"]],
+    "js_only_test.mbt": ["js"],
+    "js_or_wasm.mbt": ["js", "wasm"],
+    "wasm_release_or_js_debug.mbt": ["or", ["and", "wasm", "release"], ["and", "js", "debug"]]
+  }
+)
+```
+
+### moon.pkg.json
+
 ```json
 {
   "targets": {
@@ -146,13 +363,136 @@ Example:
 }
 ```
 
+## Supported Targets
+
+The `supported_targets` field declares which backends a package is intended to support.
+It uses a target-set expression, not an array:
+
+### moon.pkg
+
+```moonbit
+supported_targets = "js"
+```
+
+### moon.pkg.json
+
+```json
+{
+  "supported-targets": "js"
+}
+```
+
+Examples:
+
+- `js` for a single backend
+- `+js+wasm-gc` for an explicit set of backends
+- `+all-js` for all backends except `js`
+
+Legacy array syntax is still accepted for compatibility:
+
+### moon.pkg
+
+```moonbit
+supported_targets = ["js", "native"]
+```
+
+### moon.pkg.json
+
+```json
+{
+  "supported-targets": ["js", "native"]
+}
+```
+
+This is package metadata, not a conditional compilation rule:
+
+- use `supported_targets` to declare the package's supported backend set
+- use `targets` to include or exclude individual files for different backends
+- use `preferred_target` in `moon.mod` to choose the default backend for commands such as `moon check`, `moon run`, and `moon build`
+
+When both the module and the package declare `supported_targets`, the effective backend set is
+their intersection.
+
+Command behavior follows the selected backend:
+
+- `moon check`, `moon build`, `moon test`, and `moon bench` keep only packages that support the selected backend
+- `moon run` requires the selected package to support the selected backend
+- `moon info` skips unsupported selected packages with a warning
+- `moon bundle` skips package targets that do not support the selected backend
+
+After root selection, Moon also checks reachable required dependencies. If a required dependency
+does not support the selected backend, the command fails with a normal user-facing error.
+
+Notes:
+
+- omitting `supported_targets` means all backends are supported
+- `--target all` expands to `wasm`, `wasm-gc`, `js`, and `native`, but not `llvm`
+- `llvm` is still a valid `supported_targets` value
+- legacy array syntax is deprecated, but still accepted for compatibility
+
+A common setup is:
+
+- mark a native-only package with `supported_targets = "native"`
+- set `preferred_target = "native"` in `moon.mod`
+- use `targets` only when some files inside the package differ by backend
+
+## Native Stub Files
+
+The `native-stub` field lists C stub source files that should be compiled with
+this package for native builds.
+
+This is commonly used together with [`extern "C"` declarations in the FFI
+documentation](https://docs.moonbitlang.com/en/latest/language/ffi.html), where the stub file provides wrapper
+functions or adapter code that is easier to write in C than directly in
+MoonBit.
+
+Paths are relative to the package directory.
+
+### moon.pkg
+
+```moonbit
+options(
+  "native-stub": [ "stub.c", "helpers.c" ],
+)
+```
+
+### moon.pkg.json
+
+```json
+{
+  "native-stub": ["stub.c", "helpers.c"]
+}
+```
+
 ## Link Options
 
-By default, moon only links packages where `is-main` is set to `true`. If you need to link other packages, you can specify this with the `link` option.
+Packages declared as `executable` or `foreign_library` produce linked output.
+The boolean `link: true` form is legacy; use
+`pkgtype(kind: "foreign_library")` when a package builds a library for foreign
+code. An object-valued `link` option configures backend-specific linking.
 
 The `link` option is used to specify link options, and its value can be either a boolean or an object.
 
+Currently, `link` does not work for the native backend. The behavior described
+in this section applies to the `wasm`, `wasm-gc`, and `js` backends.
+
+For new function exports, prefer
+[`#export_name`](https://docs.moonbitlang.com/en/latest/language/attributes.html#export-name-attribute). Use the
+backend-specific `exports` field when the export set or names must differ by
+backend, or when the source cannot be annotated.
+
 - When the `link` value is `true`, it indicates that the package should be linked. The output will vary depending on the backend specified during the build.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: true
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": true
@@ -167,6 +507,24 @@ The `link` option is used to specify link options, and its value can be either a
 - The `exports` option is used to specify the function names exported by the Wasm backend.
 
   For example, in the following configuration, the `hello` function from the current package is exported as the `hello` function in the Wasm module, and the `foo` function is exported as the `bar` function in the Wasm module. In the Wasm host, the `hello` and `bar` functions can be called to invoke the `hello` and `foo` functions from the current package.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "wasm": {
+        "exports": [ "hello", "foo:bar" ],
+      },
+      "wasm-gc": {
+        "exports": [ "hello", "foo:bar" ],
+      }
+    }
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -188,6 +546,30 @@ The `link` option is used to specify link options, and its value can be either a
 - The `import-memory` option is used to specify the linear memory imported by the Wasm module.
 
   For example, the following configuration specifies that the linear memory imported by the Wasm module is the `memory` variable from the `env` module.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "wasm": {
+        "import-memory": {
+          "module": "env",
+          "name": "memory",
+        },
+      },
+      "wasm-gc": {
+        "import-memory": {
+          "module": "env",
+          "name": "memory",
+        },
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -206,7 +588,77 @@ The `link` option is used to specify link options, and its value can be either a
     }
   }
   ```
+- The `memory-limits` option is used to specify the minimum and maximum size of
+  the linear memory used by the Wasm module.
+- The `shared-memory` option is used to enable shared linear memory.
+
+  For example, the following configuration sets memory limits and enables
+  shared memory for both the `wasm` and `wasm-gc` backends.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "wasm": {
+        "memory-limits": {
+          "min": 1,
+          "max": 65536,
+        },
+        "shared-memory": true,
+      },
+      "wasm-gc": {
+        "memory-limits": {
+          "min": 1,
+          "max": 65535,
+        },
+        "shared-memory": true,
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
+  ```json
+  {
+    "link": {
+      "wasm": {
+        "memory-limits": {
+          "min": 1,
+          "max": 65536
+        },
+        "shared-memory": true
+      },
+      "wasm-gc": {
+        "memory-limits": {
+          "min": 1,
+          "max": 65535
+        },
+        "shared-memory": true
+      }
+    }
+  }
+  ```
 - The `export-memory-name` option is used to specify the name of the linear memory exported by the Wasm module.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "wasm": {
+        "export-memory-name": "memory",
+      },
+      "wasm-gc": {
+        "export-memory-name": "memory",
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -225,6 +677,21 @@ The `link` option is used to specify link options, and its value can be either a
 - The `heap-start-address` option is used to specify the starting address of the linear memory that can be used when compiling to the Wasm backend.
 
   For example, the following configuration sets the starting address of the linear memory to 1024.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "wasm": {
+        "heap-start-address": 1024,
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -237,10 +704,25 @@ The `link` option is used to specify link options, and its value can be either a
 
 #### Wasm GC Backend Link Options
 
-- The `use-js-string-builtin` option is used to specify whether the [JS String Builtin Proposal](https://github.com/WebAssembly/js-string-builtins/blob/main/proposals/js-string-builtins/Overview.md) should be enabled when compiling to the Wasm GC backend.
+- The `use-js-builtin-string` option is used to specify whether the [JS String Builtin Proposal](https://github.com/WebAssembly/js-string-builtins/blob/main/proposals/js-string-builtins/Overview.md) should be enabled when compiling to the Wasm GC backend.
   It will make the `String` in MoonBit equivalent to the `String` in JavaScript host runtime.
 
   For example, the following configuration enables the JS String Builtin.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "wasm-gc": {
+        "use-js-builtin-string": true,
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -254,6 +736,22 @@ The `link` option is used to specify link options, and its value can be either a
   It should meet the configuration in the JS host runtime.
 
   For example, the following configuration and JS initialization configures the imported string namespace.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "wasm-gc": {
+        "use-js-builtin-string": true,
+        "imported-string-constants": "_",
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -274,6 +772,21 @@ The `link` option is used to specify link options, and its value can be either a
 - The `exports` option is used to specify the function names to export in the JavaScript module.
 
   For example, in the following configuration, the `hello` function from the current package is exported as the `hello` function in the JavaScript module. In the JavaScript host, the `hello` function can be called to invoke the `hello` function from the current package.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "js": {
+        "exports": [ "hello" ],
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -293,6 +806,21 @@ The `link` option is used to specify link options, and its value can be either a
   - `iife`
 
   For example, the following configuration sets the output format of the current package to ES Module.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "js": {
+        "format": "esm",
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -307,6 +835,21 @@ The `link` option is used to specify link options, and its value can be either a
 
 - The `cc` option is used to specify the compiler for compiling the `moonc`-generated C source files.
   It can be either a full path to the compiler or a simple name that is accessible via the PATH environment variable.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "native": {
+        "cc": "/usr/bin/gcc13",
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -318,6 +861,21 @@ The `link` option is used to specify link options, and its value can be either a
   ```
 - The `cc-flags` option is used to override the default flags passed to the compiler.
   For example, you can use the following flag to define a macro called MOONBIT.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "native": {
+        "cc-flags": "-DMOONBIT",
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -332,6 +890,21 @@ The `link` option is used to specify link options, and its value can be either a
   you should prefix specific options with `-Wl,` or `/link ` when passing them.
 
   The following example strips symbol information from produced binary.
+
+  ### moon.pkg
+
+  ```moonbit
+  options(
+    link: {
+      "native": {
+        "cc-link-flags": "-s",
+      },
+    },
+  )
+  ```
+
+  ### moon.pkg.json
+
   ```json
   {
     "link": {
@@ -359,13 +932,16 @@ Here is a brief summarization to [compiler_flags.rs](https://github.com/moonbitl
 
 ##### C Compiler
 
-Search in PATH for the following items from top to bottom.
+On Windows, the native backend requires an MSVC-compatible toolchain with C++
+tools and the Windows SDK. Both Microsoft `cl.exe` and LLVM `clang-cl.exe` are
+supported. MinGW toolchains are not supported.
 
-- cl
+On other platforms, Moon searches PATH for the following items from top to
+bottom.
+
 - gcc
 - clang
 - cc
-- the internal tcc
 
 For GCC-like compilers, the default compile & link command is as follows.
 `[]` is used to indicate the flags may not exist in some modes.
@@ -376,20 +952,58 @@ cc -o $target -I$MOON_HOME/include -L$MOON_HOME/lib [-g] [-shared -fPIC] \
    $sources -lm $cc_flags $cc_link_flags
 ```
 
-For MSVC, the default compile & link command is as follows.
+For MSVC-compatible compiler drivers on Windows, the default compile & link
+command is as follows.
 
 ```shell
 cl (/Fo|/Fe)$target -I$MOON_HOME/include [/LD] /utf-8 /wd4819 /nologo (/O2|/Od) \
    /link /LIBPATH:$MOON_HOME/lib
 ```
 
-## Pre-build
+## Rule and dev_build
 
-The `"pre-build"` field is used to specify pre-build commands, which will be executed before build commands such as `moon check|build|test`.
+`rule` declares a reusable command, and `dev_build` applies a rule to concrete
+input and output files. These pre-build steps run before development commands
+such as `moon check`, `moon build`, and `moon test`.
 
-`"pre-build"` is an array, where each element is an object containing `input`, `output`, and `command` fields. The `input` and `output` fields can be strings or arrays of strings, while the `command` field is a string. In the `command`, you can use any shell commands, as well as the `$input` and `$output` variables, which represent the input and output files, respectively. If these fields are arrays, they will be joined with spaces by default.
+This mechanism is intended for package authors during package development. When
+the package is used as a dependency by downstream users, these pre-build steps
+are not triggered for security reasons, so dependencies do not execute arbitrary
+commands during builds. Commit the generated output files to the repository so
+downstream users can build against them directly.
 
-Currently, there is a built-in special command `:embed`, which converts files into MoonBit source code. The `--text` parameter is used to embed text files, and `--binary` is used for binary files. `--text` is the default and can be omitted. The `--name` parameter is used to specify the generated variable name, with `resource` being the default. The command is executed in the directory where the `moon.pkg.json` file is located.
+`rule(name: "...", command: "...")` declares a reusable command template. The
+`name` field identifies the rule, and `command` is a shell command string. The
+command can refer to `$input` and `$output`, which are supplied by the
+`dev_build` entry that uses the rule. A package can declare multiple `rule`
+entries.
+
+`dev_build(rule: "...", input: "...", output: "...")` declares a pre-build
+step. It selects a rule and supplies the input and output paths used when
+expanding that rule's command. A package can declare multiple `dev_build`
+entries.
+
+Pre-build commands run with the module root as their working directory. Input,
+output, and other pre-build paths are resolved relative to that module root.
+
+Rules can be declared either as package-level rules in the same `moon.pkg` or as
+module-level rules in [`moon.mod`](https://docs.moonbitlang.com/en/latest/toolchain/moon/module.html). A package-level
+rule is visible only to `dev_build` entries in that same `moon.pkg`; a
+module-level rule is visible to `dev_build` entries in every package in the
+module. When resolving a rule name, `moon` first looks for a package-level rule
+in the same `moon.pkg`, then for a module-level rule in `moon.mod`.
+
+### moon.pkg
+
+```moonbit
+rule(name: "copy", command: "cat $input > $output")
+dev_build(rule: "copy", input: "a.txt", output: "a.mbt")
+```
+
+### moon.pkg.json
+
+The `rule` and `dev_build` entries are not supported in `moon.pkg.json`. Use the
+deprecated `pre-build` configuration instead:
 
 ```json
 {
@@ -397,38 +1011,33 @@ Currently, there is a built-in special command `:embed`, which converts files in
     {
       "input": "a.txt",
       "output": "a.mbt",
-      "command": ":embed -i $input -o $output"
+      "command": "cat $input > $output"
     }
   ]
 }
 ```
 
-If the content of `a.txt` in the current package directory is:
+In this example, running a development command such as `moon check` copies the
+contents of `a.txt` to `a.mbt` before the package is checked.
 
-```default
-hello,
-world
-```
+## Warnings List
 
-After running `moon build`, the following `a.mbt` file will be generated in the directory where the `moon.pkg.json` is located:
-
-```default
-let resource : String =
-  #|hello,
-  #|world
-  #|
-```
-
-## Warning List
-
-Used to disable warnings, enable warnings, or treat a warning as a fatal error.
-The warning list is a string composed of multiple warning name, each prefixed with a sign:
+Warning lists disable or enable warnings. To make enabled warnings fail a
+command, use `--deny-warn`. A warning list is a string composed of one or more
+warning names, each prefixed with a sign:
 
 - `-` to disable the warning
 - `+` to enable the warning
-- `@` to treat the enabled warning as a fatal error
 
 For example, in the following configuration, `-unused_value` disables the unused functions and variables warning.
+
+### moon.pkg
+
+```moonbit
+warnings = "-unused_value"
+```
+
+### moon.pkg.json
 
 ```json
 {
@@ -438,6 +1047,14 @@ For example, in the following configuration, `-unused_value` disables the unused
 
 If multiple warnings need to be disabled, they can be directly connected and combined.
 
+### moon.pkg
+
+```moonbit
+warnings = "-unused_value-unreachable_code"
+```
+
+### moon.pkg.json
+
 ```json
 {
   "warn-list": "-unused_value-unreachable_code"
@@ -446,113 +1063,152 @@ If multiple warnings need to be disabled, they can be directly connected and com
 
 If it is necessary to activate certain warnings that were originally prohibited, use the plus sign.
 
+### moon.pkg
+
+```moonbit
+warnings = "+unused_optional_argument"
+```
+
+### moon.pkg.json
+
 ```json
 {
   "warn-list": "+unused_optional_argument"
 }
 ```
 
-To treat a warning as a fatal error, use the `@`.
+Older configurations may use an `@` prefix to promote a warning to an error.
+The prefix remains accepted only for compatibility and should not be used in
+new configuration. Use `moon check --deny-warn` (and the equivalent flag on
+other CI commands) when warnings should fail the build.
 
-```json
-{
-  "warn-list": "@deprecated"
-}
-```
+You can also use warning numbers in `warnings`. In the output below, `mnemonic`
+is the symbolic warning name used in warning lists, while `id` is the numeric
+form of the same warning.
 
-You can also use warnings number in warning list. Here is the full list of warning names:
+The current list from `moonc check -warn-help` is:
 
-```default
+```none
 Available warnings:
-    name                           description
-  1 unused_value                   Unused variable or function.
-  2 unused_value                   Unused variable.
-  3 unused_type_declaration        Unused type declaration.
-  4 missing_priv                   Unused abstract type.
-  5 unused_type_variable           Unused type variable.
-  6 unused_constructor             Unused constructor.
-  7 unused_field                   Unused field or constructor argument.
-  8 redundant_modifier             Redundant modifier.
-  9 struct_never_constructed       Struct never constructed.
- 10 unused_pattern                 Unused pattern.
- 11 partial_match                  Partial pattern matching.
- 12 unreachable_code               Unreachable code.
- 13 unresolved_type_variable       Unresolved type variable.
- 14 alert or alert_<category>      All alerts or alerts with specific category.
- 15 unused_mut                     Unused mutability.
- 16 parser_inconsistency           Parser inconsistency check.
- 17 ambiguous_loop_argument        Ambiguous usage of loop argument.
- 18 useless_loop                   Useless loop expression.
- 19 toplevel_not_left_aligned      Top_level declaration is not left aligned.
- 20 deprecated                     Deprecated API usage.
- 21 missing_pattern_arguments      Some arguments of constructor are omitted in pattern.
- 22 ambiguous_block                Ambiguous block.
- 23 unused_try                     Useless try expression.
- 24 unused_error_type              Useless error type.
- 25 test_unqualified_package       Using implicitly imported API in test.
- 26 unused_catch_all               Useless catch all.
- 27 deprecated_syntax              Deprecated syntax.
- 28 todo                           Todo
- 29 unused_package                 Unused package.
- 30 missing_package_alias          Empty package alias.
- 31 unused_optional_argument       Optional argument never supplied.
- 32 unused_default_value           Default value of optional argument never used.
- 33 text_segment_excceed           Text segment exceed the line or column limits.
- 34 implicit_use_builtin           Implicit use of definitions from `moonbitlang/core/builtin`.
- 35 reserved_keyword               Reserved keyword.
- 36 loop_label_shadowing           Loop label shadows another label.
- 37 unused_loop_label              Unused loop label.
- 38 missing_invariant              For-loop is missing an invariant.
- 39 missing_reasoning              For-loop is missing a reasoning.
- 41 missing_rest_mark              Missing `..` in map pattern.
- 42 invalid_attribute              Invalid attribute.
- 43 unused_attribute               Unused attribute.
- 44 invalid_inline_wasm            Invalid inline-wasm.
- 46 unused_rest_mark               Useless `..` in pattern
- 47 invalid_mbti                   Invalid mbti file
- 48 missing_default_impl_mark      Trait method with default implementation not marked with `= _`
- 49 missing_definition             Unused pub definition because it does not exist in mbti file.
- 50 method_shadowing               Local method shadows upstream method
- 51 ambiguous_precedence           Ambiguous operator precedence
- 52 unused_loop_variable           Loop variable not updated in loop
- 53 unused_trait_bound             Unused trait bound
- 55 unannotated_ffi                Unannotated FFI param type
- 56 missing_pattern_field          Missing field in struct pattern
- 57 missing_pattern_payload        Constructor pattern expect payload
- 58 unused_non_capturing           Unnecessary non-capturing group in regex
- 59 unaligned_byte_access          Unaligned byte access in bits pattern
- 60 unused_struct_update           Unused struct update
- 61 duplicate_test                 Duplicate test name
- 62 invalid_cascade                Calling method with non-unit return type via `..`
- 63 syntax_lint                    Syntax lint warning
- 64 unannotated_toplevel_array     Unannotated toplevel array
- 65 prefer_readonly_array          Suggest ReadOnlyArray for read-only array literal
- 66 prefer_fixed_array             Suggest FixedArray for mutated array literal
- 67 unused_async                   Useless `async` annotation
- 68 declaration_unimplemented      Declaration is unimplemented
- 69 declaration_implemented        Declaration is already implemented
- 70 deprecated_for_in_method       using `iterator()` method for `for .. in` loop.
-  A                                all warnings
+mnemonic                   description                                                     id state
+unused_value               Unused variable or function.                                     1 warn
+unused_value               Unused variable.                                                 2 warn
+unused_type_declaration    Unused type declaration.                                         3 warn
+missing_priv               Unused abstract type.                                            4 warn
+unused_type_variable       Unused type variable.                                            5 warn
+unused_constructor         Unused constructor.                                              6 warn
+unused_field               Unused field or constructor argument.                            7 warn
+redundant_modifier         Redundant modifier.                                              8 warn
+struct_never_constructed   Struct never constructed.                                        9 warn
+unused_pattern             Unused pattern.                                                 10 warn
+partial_match              Partial pattern matching.                                       11 error
+unreachable_code           Unreachable code.                                               12 warn
+unresolved_type_variable   Unresolved type variable.                                       13 warn
+alert or alert_<category>  All alerts or alerts with specific category.                    14 warn
+unused_mut                 Unused mutability.                                              15 error
+parser_inconsistency       Parser inconsistency check.                                     16 warn
+ambiguous_loop_argument    Ambiguous usage of loop argument.                               17 warn
+useless_loop               Useless loop expression.                                        18 warn
+deprecated                 Deprecated API usage.                                           20 warn
+missing_pattern_arguments  Some arguments of constructor are omitted in pattern.           21 warn
+ambiguous_block            Ambiguous block.                                                22 warn
+unused_try                 Useless try expression.                                         23 warn
+unused_error_type          Useless error type.                                             24 warn
+test_unqualified_package   Using implicitly imported API in test.                          25 warn
+unused_catch_all           Useless catch all.                                              26 warn
+deprecated_syntax          Deprecated syntax.                                              27 warn
+todo                       Todo                                                            28 warn
+unused_package             Unused package.                                                 29 warn
+missing_package_alias      Empty package alias.                                            30 warn
+unused_optional_argument   Optional argument never supplied.                               31 off
+unused_default_value       Default value of optional argument never used.                  32 off
+text_segment_excceed       Text segment exceed the line or column limits.                  33 warn
+implicit_use_builtin       Implicit use of definitions from `moonbitlang/core/builtin`.    34 warn
+reserved_keyword           Reserved keyword.                                               35 warn
+block_label_shadowing      Block label shadows another label.                              36 warn
+unused_block_label         Unused block label.                                             37 warn
+missing_invariant          For-loop is missing an invariant.                               38 off
+missing_reasoning          For-loop is missing a proof_reasoning.                          39 off
+multiline_string_escape    Deprecated escape sequence in multiline string.                 40 error
+missing_rest_mark          Missing `..` in map pattern.                                    41 warn
+invalid_attribute          Invalid attribute.                                              42 warn
+unused_attribute           Unused attribute.                                               43 warn
+invalid_inline_wasm        Invalid inline-wasm.                                            44 error
+unused_rest_mark           Useless `..` in pattern                                         46 warn
+missing_definition         Unused pub definition because it does not exist in mbti file.   49 warn
+method_shadowing           Local method shadows upstream method                            50 warn
+ambiguous_precedence       Ambiguous operator precedence                                   51 warn
+unused_loop_variable       Loop variable not updated in loop                               52 warn
+unused_trait_bound         Unused trait bound                                              53 warn
+ambiguous_range_direction  Ambiguous looping direction for range e1..=e2                   54 off
+unannotated_ffi            Unannotated FFI param type                                      55 error
+missing_pattern_field      Missing field in struct pattern                                 56 warn
+missing_pattern_payload    Constructor pattern expect payload                              57 warn
+unaligned_byte_access      Unaligned byte access in bits pattern                           59 warn
+unused_struct_update       Unused struct update                                            60 warn
+duplicate_test             Duplicate test name                                             61 warn
+invalid_cascade            Calling method with non-unit return type via `..`               62 warn
+syntax_lint                Syntax lint warning                                             63 warn
+unannotated_toplevel_array Unannotated toplevel array                                      64 warn
+prefer_readonly_array      Suggest ReadOnlyArray for read-only array literal               65 off
+prefer_fixed_array         Suggest FixedArray for mutated array literal                    66 off
+unused_async               Useless `async` annotation                                      67 warn
+declaration_unimplemented  Declaration is unimplemented                                    68 warn
+declaration_implemented    Declaration is already implemented                              69 off
+deprecated_for_in_method   using `iterator()` method for `for .. in` loop.                 70 off
+core_package_not_imported  Packages in `moonbitlang/core` need to be explicitly imported.  71 warn
+unqualified_local_using    unqualified local using                                         72 off
+unnecessary_annotation     unnecessary type annotation                                     73 off
+missing_doc                Missing documentation for public definition                     74 off
+unnecessary_view_op        Unnecessary `[:]` view operator                                 75 off
+result_error_return        Using `Result[T, E]` where `E` is an error type.                78 off
+implicit_impl_as_method    `impl` implicitly promoted as method                            79 warn
+regex_match_missing_before Missing `before` binding in `regex match`.                      80 warn
+regex_match_missing_after  Missing `after` binding in `regex match`.                       81 warn
+ambiguous_braces           Ambiguous `{}` braces.                                          82 warn
+type_param_method          Calling method of type parameter in a deprecated way.           83 warn
+unqualified_record         Struct literal in a `let` binding without a type prefix.        84 off
+unlabelled_break_in_labelled_loop Unlabelled `break` directly inside a labelled loop.             85 warn
+unlabelled_continue_in_labelled_loop Unlabelled `continue` directly inside a labelled loop.          86 warn
+guard_inexhaustive         `guard` condition is not exhaustive and may panic.              87 warn
+guard_redundant_bang       Redundant `!` on an exhaustive `guard`.                         88 warn
+guard_redundant_else       Redundant `else` on an exhaustive `guard`.                      89 warn
+unused_lexcase             `lexmatch`/`lexscan` branch that can never be selected because other branches takes precedence or its pattern matches nothing.  90 warn
+unused_errdefer            unused `errdefer` statement                                     91 warn
+fragile_catch_all          fragile `catch` handler that can be converted to `defer` or `errdefer`  92 warn
+unknown_constr_pat_on_exhaustive_type using `TypeName::..` pattern on a type not marked with `#non_exhaustive`  93 warn
+all                        all warnings
+state: warn = enabled, error = promoted to error, off = disabled
+note: default alert exceptions: alert_unsafe=off
 ```
 
 #### NOTE
-Use `moonc build-package -warn-help` to see the list of preset compiler warnings.
+Use `moonc check -warn-help` to see the list of preset compiler warnings.
 
 ### Alert Warning
 
 Alerts are special warnings that indicate the usage of API marked with
-[`#internal` attribute](../../language/attributes.md#internal-attribute).
+[`#internal` attribute](https://docs.moonbitlang.com/en/latest/language/attributes.html#internal-attribute).
 
-All alerts has a category associated with it, which is customized by the author of the API.
+All alerts have a category associated with them, which is customized by the author of the API.
 You can enable or disable specific alert categories using the `alert_<category>` warning name,
 or use `alert` to control all alert warnings at once.
 
-For example, in the following configuration, all warnings for alerts are treated
-as fatal errors, except for the `unsafe` category, which is disabled.
+For example, the following configuration enables all alert warnings except the
+`unsafe` category. In CI, add `--deny-warn` to `moon check`, `moon test`, or the
+equivalent command to treat enabled warnings as fatal errors.
+
+### moon.pkg
+
+```moonbit
+warnings = "+alert-alert_unsafe"
+```
+
+### moon.pkg.json
 
 ```json
 {
-  "warn-list": "@alert-alert_unsafe" 
+  "warn-list": "+alert-alert_unsafe"
 }
 ```
 
@@ -565,6 +1221,18 @@ A virtual package serves as an interface of a package that can be replaced by ac
 The `virtual` field is used to declare the current package as a virtual package.
 
 For example, the following declares a virtual package with default implementation:
+
+### moon.pkg
+
+```moonbit
+options(
+  virtual: {
+    "has-default": true,
+  },
+)
+```
+
+### moon.pkg.json
 
 ```json
 {
@@ -580,6 +1248,16 @@ The `implement` field is used to declare the virtual package to be implemented b
 
 For example, the following implements a virtual package:
 
+### moon.pkg
+
+```moonbit
+options(
+  implement: "moonbitlang/core/abort",
+)
+```
+
+### moon.pkg.json
+
 ```json
 {
   "implement": "moonbitlang/core/abort"
@@ -591,6 +1269,16 @@ For example, the following implements a virtual package:
 The `overrides` field is used to provide the implementations that fulfills an imported virtual package.
 
 For example, the following overrides the default implementation of the builtin abort package with another package:
+
+### moon.pkg
+
+```moonbit
+options(
+  overrides: [ "moonbitlang/dummy_abort/abort_show_msg" ],
+)
+```
+
+### moon.pkg.json
 
 ```json
 {

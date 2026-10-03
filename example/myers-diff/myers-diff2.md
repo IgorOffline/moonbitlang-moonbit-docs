@@ -1,6 +1,6 @@
 # Myers diff 2
 
-This is the second post in the diff series. In the [previous one](myers-diff.md), we learned how to transform the process of computing diffs into a graph search problem and how to search for the shortest edit distance. In this article, we will learn how to extend the search process from the previous post to obtain the complete edit sequence.
+This is the second post in the diff series. In the [previous one](https://docs.moonbitlang.com/en/latest/example/myers-diff/myers-diff.html), we learned how to transform the process of computing diffs into a graph search problem and how to search for the shortest edit distance. In this article, we will learn how to extend the search process from the previous post to obtain the complete edit sequence.
 
 ## Recording the Search Process
 
@@ -44,7 +44,7 @@ fn shortest_edit(
         return trace
       }
     }
-  } else {
+  } nobreak {
     abort("impossible")
   }
 }
@@ -60,7 +60,7 @@ enum Edit {
   Insert(new~ : Line)
   Delete(old~ : Line)
   Equal(old~ : Line, new~ : Line) // old, new
-} derive(Show)
+}
 ```
 
 Next, let's perform the backtracking.
@@ -74,7 +74,7 @@ fn backtrack(
 ) -> Array[Edit] {
   let mut x = old.length()
   let mut y = new.length()
-  let edits = Array::new(capacity=trace.length())
+  let edits = Array(capacity=trace.length())
 ```
 
 The method of backtracking is essentially the same as forward search, just in reverse.
@@ -166,12 +166,12 @@ fn pprint_edit(edit : Edit) -> String {
 
 ///|
 fn pprint_diff(diff : Array[Edit]) -> String {
-  let buf = @buffer.new(size_hint=100)
+  let buf = StringBuilder(size_hint=100)
   for i = diff.length(); i > 0; i = i - 1 {
     buf.write_string(pprint_edit(diff[i - 1]))
     buf.write_char('\n')
-  } else {
-    buf.contents().to_unchecked_string()
+  } nobreak {
+    buf.to_string()
   }
 }
 ```

@@ -26,7 +26,7 @@ let b = false
 let c = a && b
 let d = a || b
 let e = !a
-let f = not(a)
+let f = !(a && b)
 ```
 
 ### Number
@@ -109,8 +109,8 @@ let bigint : BigInt = 42
 
 ```moonbit
 let a = "兔rabbit"
-println(a.code_unit_at(0).to_char())
-println(a.code_unit_at(1).to_char())
+debug_inspect(a.code_unit_at(0).to_char(), content="Some('兔')")
+debug_inspect(a.code_unit_at(1).to_char(), content="Some('r')")
 let b =
   #| Hello
   #| MoonBit\n
@@ -118,9 +118,7 @@ let b =
 println(b)
 ```
 
-```default
-Some('兔')
-Some('r')
+```none
  Hello
  MoonBit\n
 
@@ -134,7 +132,7 @@ In double quotes string, a backslash followed by certain special characters form
 | `\\`                   | Backslash                                            |
 | `\u5154` , `\u{1F600}` | Unicode escape sequence                              |
 
-MoonBit supports string interpolation. It enables you to substitute variables within interpolated strings. This feature simplifies the process of constructing dynamic strings by directly embedding variable values into the text. Variables used for string interpolation must implement the [`Show` trait](methods.md#builtin-traits).
+MoonBit supports string interpolation. It enables you to substitute variables within interpolated strings. This feature simplifies the process of constructing dynamic strings by directly embedding variable values into the text. Variables used for string interpolation must implement the [`Show` trait](https://docs.moonbitlang.com/en/latest/language/methods.html#builtin-traits).
 
 ```moonbit
 let x = 42
@@ -162,7 +160,7 @@ println(raw)
 println(interp)
 ```
 
-```default
+```none
  Hello
  ---
  \{lang}
@@ -175,7 +173,7 @@ println(interp)
 
 Avoid mixing `$|` and `#|` within the same multi-line string; pick one style for the whole block.
 
-The [VSCode extension](../toolchain/vscode/index.md#actions) includes an action that can turn pasted documents into a plain multi-line string and switch between plain text and MoonBit multi-line strings.
+The [VSCode extension](https://docs.moonbitlang.com/en/latest/toolchain/vscode/index.html#actions) includes an action that can turn pasted documents into a plain multi-line string and switch between plain text and MoonBit multi-line strings.
 
 When the expected type is `String` , the array literal syntax is overloaded to
 construct the `String` by specifying each character in the string.
@@ -235,7 +233,7 @@ fn main {
 }
 ```
 
-```default
+```none
 97
 255
 ```
@@ -249,6 +247,19 @@ test {
   assert_eq(b1, b2)
 }
 ```
+
+Bytes literals support interpolation with `b"...\{expression}"`. The
+interpolated string is encoded as UTF-8 to produce `Bytes`:
+
+```moonbit
+test {
+  let value = 42
+  let bytes : Bytes = b"value=\{value}"
+  assert_eq(bytes, b"value=42")
+}
+```
+
+Template-write syntax also accepts interpolated Bytes literals.
 
 The byte literal and bytes literal also support escape sequences, but different from those in string literals. The following table lists the supported escape sequences for byte and bytes literals:
 
@@ -264,19 +275,20 @@ You can use `@buffer.T` to construct bytes by writing various types of data. For
 
 ```moonbit
 test "buffer 1" {
-  let buf : @buffer.Buffer = @buffer.new()
+  let buf : @buffer.Buffer = Buffer()
   buf.write_bytes(b"Hello")
   buf.write_byte(b'!')
   assert_eq(buf.contents(), b"Hello!")
 }
 ```
 
-When the expected type is `Bytes`, the `b` prefix can be omitted. Array literals can also be overloaded to construct a `Bytes` sequence by specifying each byte in the sequence.
+Array literals can also be overloaded to construct a `Bytes` sequence by
+specifying each byte in the sequence.
 
 ```moonbit
 test {
-  let b : Byte = '\xFF'
-  let bs : Bytes = [b, '\x01']
+  let b : Byte = b'\xFF'
+  let bs : Bytes = [b, b'\x01']
   inspect(
     bs,
     content=(
@@ -294,6 +306,31 @@ API for `Bytes`: [https://mooncakes.io/docs/moonbitlang/core/bytes](https://moon
 API for `@buffer.T`: [https://mooncakes.io/docs/moonbitlang/core/buffer](https://mooncakes.io/docs/moonbitlang/core/buffer)
 
 [Overloaded Literals]()
+
+#### Choosing a Byte Container
+
+MoonBit has several byte-oriented container types. They are related, but they
+serve different jobs:
+
+| Type                 | Ownership / mutability   | Resizable   | Typical use                                                   |
+|----------------------|--------------------------|-------------|---------------------------------------------------------------|
+| `Bytes`              | owned, immutable         | no          | final byte payloads, API boundaries, serialized data          |
+| `BytesView`          | borrowed, immutable view | no          | slicing or parsing existing bytes without copying             |
+| `Array[Byte]`        | owned, mutable           | yes         | general-purpose mutable byte storage                          |
+| `FixedArray[Byte]`   | owned, mutable           | no          | fixed-size working buffers                                    |
+| `ArrayView[Byte]`    | borrowed array view      | no          | passing slices of array-backed byte storage without ownership |
+| `MutArrayView[Byte]` | borrowed, mutable view   | no          | mutating borrowed array-backed byte storage in place          |
+| `@buffer.Buffer`     | owned, mutable builder   | yes         | incrementally constructing bytes, then calling `contents()`   |
+
+Two common distinctions matter:
+
+- `Bytes` versus `BytesView`: owned immutable data versus a borrowed immutable slice.
+- `Array[Byte]` versus `ArrayView[Byte]` / `MutArrayView[Byte]`: owned mutable storage versus borrowed readonly or mutable views over it.
+
+`ReadOnlyArray[Byte]` and `MutArrayView[Byte]` are the corresponding read-only
+and mutable view types when you need to express those constraints explicitly.
+Pattern matching and bitstring parsing also work on these byte containers; see
+[Array Pattern]() and [Bitstring Pattern]().
 
 ### Tuple
 
@@ -316,7 +353,7 @@ fn main {
 }
 ```
 
-```default
+```none
 false 100 text 3.14
 ```
 
@@ -464,10 +501,10 @@ Both `start` and `end` indices can be omitted.
 test {
   let xs = [0, 1, 2, 3, 4, 5]
   let s1 : ArrayView[Int] = xs[2:]
-  inspect(s1, content="[2, 3, 4, 5]")
-  inspect(xs[:4], content="[0, 1, 2, 3]")
-  inspect(xs[2:5], content="[2, 3, 4]")
-  inspect(xs[:], content="[0, 1, 2, 3, 4, 5]")
+  @test.assert_eq(s1.to_owned(), [2, 3, 4, 5])
+  @test.assert_eq(xs[:4].to_owned(), [0, 1, 2, 3])
+  @test.assert_eq(xs[2:5].to_owned(), [2, 3, 4])
+  @test.assert_eq(xs[:].to_owned(), [0, 1, 2, 3, 4, 5])
   let mv : MutArrayView[Int] = xs.mut_view(start=1, end=3)
   mv[0] = 99
   inspect(xs[1], content="99")
@@ -515,6 +552,10 @@ API: [https://mooncakes.io/docs/moonbitlang/core/json](https://mooncakes.io/docs
 ## Overloaded Literals
 
 Overloaded literals allow you to use the same syntax to represent different types of values.
+
+An empty `{}` literal is ambiguous: it may mean an empty map, an empty JSON
+object, an empty record, or a block. Write the intended form explicitly:
+`Map([])`, `Json::empty_object()`, `Record::{}`, or `{ () }`, respectively.
 For example, you can use `1` to represent `UInt` or `Double` depending on the expected type. If the expected type is not known, the literal will be interpreted as `Int` by default.
 
 ```moonbit
@@ -534,8 +575,8 @@ The overloaded literals can be composed. If array literal can be overloaded to `
 | Overloaded literal                                          | Default type   | Can be overloaded to                                                              |
 |-------------------------------------------------------------|----------------|-----------------------------------------------------------------------------------|
 | `10`, `0xFF`, `0o377`, `10_000`                             | `Int`          | `UInt`, `Int64`, `UInt64`, `Int16`, `UInt16`, `Byte`, `Double`, `Float`, `BigInt` |
-| `"str"`                                                     | `String`       | `Bytes`                                                                           |
-| `'c'`                                                       | `Char`         | `Int` , `Byte`                                                                    |
+| `"str"`                                                     | `String`       | —                                                                                 |
+| `'c'`                                                       | `Char`         | `Int`                                                                             |
 | `3.14`                                                      | `Double`       | `Float`                                                                           |
 | `[a, b, c]` (where the types of literals a, b, and c are E) | `Array[E]`     | `FixedArray[E]`, `String`  (if E is of type Char), `Bytes` (if E is of type Byte) |
 
@@ -574,6 +615,33 @@ fn add3(x : Int, y : Int, z : Int) -> Int {
 
 Note that the arguments and return value of top-level functions require **explicit** type annotations.
 
+Top-level functions and methods can also be introduced with `declare`.
+A declared function has a signature but no body, and a later implementation must match that signature.
+This is useful when you want to make an API shape available before placing its implementation.
+
+```moonbit
+declare fn declared_add(x : Int, y : Int) -> Int
+
+fn declared_add(x : Int, y : Int) -> Int {
+  x + y
+}
+
+struct DeclaredCounter(Int)
+
+declare fn DeclaredCounter::value(self : Self) -> Int
+
+fn DeclaredCounter::value(self : Self) -> Int {
+  self.0
+}
+
+test "declared functions" {
+  @test.assert_eq(declared_add(1, 2), 3)
+  @test.assert_eq(DeclaredCounter(4).value(), 4)
+}
+```
+
+If a declared function has an implementation, the declaration and the implementation must agree on the function name, visibility, type parameters, parameters, return type, and effects.
+
 ### Local Functions
 
 Local functions can be named or anonymous. Type annotations can be omitted for local function definitions: they can be automatically inferred in most cases. For example:
@@ -600,6 +668,12 @@ For simple anonymous function, MoonBit provides a very concise syntax called arr
   [1, 2, 3].each(x => println(x * x))
 ```
 
+Although local function supports type inference for types of parameters and return value,
+*effect inference* is only supported for the arrow function syntax.
+If a `fn` may [raise error](https://docs.moonbitlang.com/en/latest/language/error-handling.html)
+or [perform asynchronous operations](https://docs.moonbitlang.com/en/latest/language/async-experimental.html),
+it must be explicitly annotated with `raise` or `async`.
+
 Functions, whether named or anonymous, are *lexical closures*: any identifiers without a local binding must refer to bindings from a surrounding lexical scope. For example:
 
 ```moonbit
@@ -618,7 +692,7 @@ fn local_2(x : Int) -> (Int, Int) {
 }
 
 test {
-  assert_eq(local_2(3), (4, 4))
+  @test.assert_eq(local_2(3), (4, 4))
 }
 ```
 
@@ -684,7 +758,7 @@ fn add(x : Int, y : Int) -> Int {
 }
 
 test {
-  let add10 : (Int) -> Int = add(10, _)
+  let add10 : (Int) -> Int = x => add(10, x)
   println(add10(5)) // prints 15
   println(add10(10)) // prints 20
 }
@@ -694,6 +768,9 @@ The `_` operator represents the missing argument in parentheses. The partial app
 For example, `Array::fold(_, _, init=5)` is equivalent to `fn(x, y) { Array::fold(x, y, init=5) }`.
 
 The `_` operator can also be used in enum creation, dot style function calls and in the pipelines.
+
+#### WARNING
+The syntax `f(a, _, b)` for partial application is deprecated. Use `x => f(a, x, b)` instead.
 
 ### Labelled arguments
 
@@ -740,11 +817,11 @@ fn incr(counter? : Ref[Int] = { val: 0 }) -> Ref[Int] {
 }
 
 test {
-  inspect(incr(), content="{val: 1}")
-  inspect(incr(), content="{val: 1}")
-  let counter : Ref[Int] = { val: 0 }
-  inspect(incr(counter~), content="{val: 1}")
-  inspect(incr(counter~), content="{val: 2}")
+  @test.assert_eq(incr().val, 1)
+  @test.assert_eq(incr().val, 1)
+  let counter = Ref::{ val: 0 }
+  @test.assert_eq(incr(counter~).val, 1)
+  @test.assert_eq(incr(counter~).val, 2)
 }
 ```
 
@@ -773,11 +850,19 @@ For async functions, optional argument expressions can call async functions as
 usual:
 
 ```moonbit
-async fn fetch_default() -> Int raise { ... }
 
-async fn build(x? : Int = fetch_default()) -> Int raise { ... }
+///|
+async fn fetch_default() -> Int {
+  ...
+}
 
-async fn use_value() -> Int raise {
+///|
+async fn build(x? : Int = fetch_default()) -> Int {
+  ...
+}
+
+///|
+async fn use_value() -> Int {
   build(x=fetch_default())
 }
 ```
@@ -806,7 +891,7 @@ fn create_rectangle(a : Int, b? : Int = a) -> (Int, Int) {
 }
 
 test {
-  inspect(create_rectangle(10), content="(10, 10)")
+  debug_inspect(create_rectangle(10), content="(10, 10)")
 }
 ```
 
@@ -840,6 +925,8 @@ fn fixed_width_image(height? : Int) -> Image {
   image(width=1920, height?)
 }
 ```
+
+<a id="autofill-arguments"></a>
 
 ### Autofill arguments
 
@@ -938,7 +1025,7 @@ fn guarded_get(array : Array[Int], index : Int) -> Int? {
 }
 
 test {
-  inspect(guarded_get([1, 2, 3], -1), content="None")
+  debug_inspect(guarded_get([1, 2, 3], -1), content="None")
 }
 ```
 
@@ -967,13 +1054,26 @@ fn getProcessedText(
 }
 ```
 
-When the `else` part is omitted, the program terminates if the condition specified
-in the `guard` statement is not true or cannot be matched.
+An ordinary `guard` that may fail must have an `else` clause. If the compiler
+cannot prove that a `guard` without `else` always succeeds, it reports
+[E0087](https://docs.moonbitlang.com/en/latest/language/error_codes/E0087.html), because failure would implicitly
+terminate the program. Use `guard!` when termination is intended. Unlike
+`guard`, `guard!` cannot have an `else` clause.
 
 ```moonbit
-guard condition  // <=> guard condition else { panic() }
-guard expr is Some(x)
+guard! condition  // <=> guard condition else { panic() }
+guard! expr is Some(x)
 // <=> guard expr is Some(x) else { _ => panic() }
+```
+
+When a condition or pattern is exhaustive, use plain `guard` without an `else`.
+The compiler reports a warning for a redundant `!` or `else` clause.
+
+```moonbit
+fn require_some(value : Int?) -> Int {
+  guard! value is Some(result)
+  result
+}
 ```
 
 ### While loop
@@ -990,7 +1090,7 @@ fn main {
 }
 ```
 
-```default
+```none
 5
 4
 3
@@ -1016,12 +1116,12 @@ fn main {
 }
 ```
 
-```default
+```none
 3
 2
 ```
 
-The `while` loop also supports an optional `else` clause. When the loop condition becomes false, the `else` clause will be executed, and then the loop will end.
+The `while` loop also supports an optional `nobreak` clause. When the loop condition becomes false, the `nobreak` clause will be executed, and then the loop will end.
 
 ```moonbit
 fn main {
@@ -1029,19 +1129,19 @@ fn main {
   while i > 0 {
     println(i)
     i = i - 1
-  } else {
+  } nobreak {
     println(i)
   }
 }
 ```
 
-```default
+```none
 2
 1
 0
 ```
 
-When there is an `else` clause, the `while` loop can also return a value. The return value is the evaluation result of the `else` clause. In this case, if you use `break` to exit the loop, you need to provide a return value after `break`, which should be of the same type as the return value of the `else` clause.
+When there is an `nobreak` clause, the `while` loop can also return a value. The return value is the evaluation result of the `nobreak` clause. In this case, if you use `break` to exit the loop, you need to provide a return value after `break`, which should be of the same type as the return value of the `nobreak` clause.
 
 ```moonbit
 fn main {
@@ -1051,14 +1151,14 @@ fn main {
     if i % 2 == 0 {
       break 5
     }
-  } else {
+  } nobreak {
     7
   }
   println(r)
 }
 ```
 
-```default
+```none
 5
 ```
 
@@ -1067,14 +1167,14 @@ fn main {
   let mut i = 10
   let r = while i > 0 {
     i = i - 1
-  } else {
+  } nobreak {
     7
   }
   println(r)
 }
 ```
 
-```default
+```none
 7
 ```
 
@@ -1091,7 +1191,7 @@ fn main {
 }
 ```
 
-```default
+```none
 0
 1
 2
@@ -1115,12 +1215,12 @@ Variable initialization clauses, loop conditions, and update clauses are all opt
 for i = 1; ; i = i + 1 {
   println(i)
 }
-for {
+for ;; {
   println("loop forever")
 }
 ```
 
-The `for` loop also supports `continue`, `break`, and `else` clauses. Like the `while` loop, the `for` loop can also return a value using the `break` and `else` clauses.
+The `for` loop also supports `continue`, `break`, and `nobreak` clauses. Like the `while` loop, the `for` loop can also return a value using the `break` and `nobreak` clauses.
 
 The `continue` statement skips the remaining part of the current iteration of the `for` loop (including the update clause) and proceeds to the next iteration. The `continue` statement can also update the binding variables of the `for` loop, as long as it is followed by expressions that match the number of binding variables, separated by commas.
 
@@ -1133,14 +1233,14 @@ fn main {
       println("even: \{i}")
       continue i + 1, acc + i
     }
-  } else {
+  } nobreak {
     acc
   }
   println(sum)
 }
 ```
 
-```default
+```none
 even: 2
 even: 4
 even: 6
@@ -1160,6 +1260,20 @@ for x in [1, 2, 3] {
 `for .. in` loop is translated to the use of `Iter` in MoonBit's standard library. Any type with a method `.iter() : Iter[T]` can be traversed using `for .. in`.
 For more information of the `Iter` type, see [Iterator]() below.
 
+The loop binding may be an exhaustive pattern, so an item can be destructured
+directly in the loop header. The pattern must match every possible item; handle
+refutable alternatives such as `Some(value)` inside the loop body instead.
+
+```moonbit
+test "destructuring patterns in for-in loops" {
+  let mut total = 0
+  for (x, y) in [(1, 2), (3, 4)] {
+    total += x + y
+  }
+  assert_eq(total, 10)
+}
+```
+
 `for .. in` loop also supports iterating through a sequence of integers, such as:
 
 ```moonbit
@@ -1170,7 +1284,7 @@ test {
   }
   assert_eq(i, 45)
   let mut k = 0
-  for l in 0..=10 {
+  for l in 0..<=10 {
     k += l
   }
   assert_eq(k, 55)
@@ -1198,7 +1312,7 @@ fn main {
 }
 ```
 
-```default
+```none
 The 1-th element of the array is 4
 The 2-th element of the array is 5
 The 3-th element of the array is 6
@@ -1221,36 +1335,98 @@ fn main {
 }
 ```
 
-```default
+```none
 x, 1
 z, 3
 ```
 
 If a loop variable is unused, it can be ignored with `_`.
 
-### Functional loop
+### Range expression in `for .. in` loop
 
-Functional loop is a powerful feature in MoonBit that enables you to write loops in a functional style.
-
-A functional loop consumes an argument and returns a value. It is defined using the `loop` keyword, followed by its argument and the loop body. The loop body is a sequence of clauses, each of which consists of a pattern and an expression. The clause whose pattern matches the input will be executed, and the loop will return the value of the expression. If no pattern matches, the loop will panic. Use the `continue` keyword with arguments to start the next iteration of the loop. Use the `break` keyword with an argument to return a value from the loop. The `break` keyword can be omitted if the value is the last expression in the loop body.
+`for .. in` loops can also be used with range expressions for iterating over a number range:
 
 ```moonbit
-test {
-  fn sum(xs : @list.List[Int]) -> Int {
-    loop (xs, 0) {
-      (Empty, acc) => break acc // <=> Nil, acc => acc
-      (More(x, tail=rest), acc) => continue (rest, x + acc)
-    }
+fn main {
+  for x in 0..<5 {
+    println(x)
   }
-
-  assert_eq(sum(@list.from_array([1, 2, 3])), 6)
 }
 ```
+
+```none
+0
+1
+2
+3
+4
+```
+
+There are four kinds of range expressions available in `for .. in` loop:
+
+- `a..<b`: iterate from `a` to `b` in increasing order, excluding `b`
+- `a..<=b`: iterate from `a` to `b` in increasing order, including `b`
+- `a>..b`: iterate from `a` to `b` in decreasing order, excluding `a`
+- `a>=..b`: iterate from `a` to `b` in decreasing  order, including `a`
+
+### List comprehension
+
+MoonBit supports list comprehension syntax for constructing a collection by
+iterating over another collection or range:
+
+```moonbit
+let squares = [ for x in 1..<=5 => x * x ]
+let even_numbers = [ for x in 0..<100 if x % 2 == 0 => x ]
+let labelled = [ for i, x in ["a", "b", "c"] => "\{i}: \{x}" ]
+let map = { 1: 2, 2: 4, 3: 8 }
+let present = [ for x in [1, 2, 3] if map.get(x) is Some(y) => y ]
+```
+
+The syntax is `[ for ... => ... ]`. The part before `=>` follows the same
+iteration rules as `for .. in`: one binder uses `Iter`, two binders use `Iter2`,
+and range expressions such as `0..<10` are supported. An optional `if` guard
+filters elements before evaluating the result expression. Names introduced by
+an `is` expression in the guard, such as `y` above, can be used in the result
+expression.
+
+The result defaults to `Array[T]` when there is no expected type. When the
+expected type is known, a list comprehension can also construct
+`FixedArray[T]`, `ReadOnlyArray[T]`, `String`, `Bytes`, or `Json`:
+
+```moonbit
+let text : String = [ for x in 0..<3 => (x + 'a').unsafe_to_char() ]
+let bytes : Bytes = [ for x in 0..<3 => x.to_byte() ]
+let fixed : FixedArray[_] = [ for x in 1..<=3 => x ]
+```
+
+For lazy or infinite sequences, create an `Iter[T]` directly. The following
+iterator keeps Fibonacci state in captured variables and is limited before
+collection:
+
+```moonbit
+let mut p1 = 1
+let mut p2 = 0
+let fib_numbers : Iter[Int] = Iter::new(fn() {
+  let next = p1
+  p1 = p1 + p2
+  p2 = next
+  Some(next)
+})
+let first_six = fib_numbers.take(6).collect()
+```
+
+Control flow operations such as `return`, `break`, and `continue` are not
+allowed inside list comprehensions.
 
 ### Labelled Continue/Break
 
 When a loop is labelled, it can be referenced from a `break` or `continue` from
 within a nested loop. For example:
+
+Once a loop has a label, use that label for `break` or `continue` statements
+that directly target the loop as well. An unlabelled `break` or `continue`
+directly inside a labelled loop is deprecated because it leaves the target
+implicit.
 
 ```moonbit
 test "break label" {
@@ -1262,7 +1438,7 @@ test "break label" {
       count = count + i
       break outer~ j
     }
-  } else {
+  } nobreak {
     -1
   }
   assert_eq(res, 4)
@@ -1272,20 +1448,46 @@ test "break label" {
 test "continue label" {
   let mut count = 0
   let init = 10
-  let res = outer~: loop init {
-    0 => 42
-    i =>
-      for {
-        count = count + 1
-        continue outer~ i - 1
-      }
+  let res = outer~: for i = init {
+    if i == 0 {
+      break outer~ 42
+    }
+    for ;; {
+      count = count + 1
+      continue outer~ i - 1
+    }
   }
   assert_eq(res, 42)
   assert_eq(count, 10)
 }
 ```
 
-### `defer` expression
+### Labelled Blocks
+
+A block can also have a label. `break label~ value` exits the block immediately
+and makes `value` the result of the block. This is useful for returning early
+from nested control flow without returning from the enclosing function.
+
+```moonbit
+fn absolute(n : Int) -> Int {
+  result~: {
+    if n < 0 {
+      break result~ -n
+    }
+    n
+  }
+}
+```
+
+An unlabelled `break` cannot exit or pass through a labelled block, and
+`continue` can only target a labelled loop, not a labelled block.
+
+Block and loop labels share the same namespace. Reusing an enclosing label on
+a nested block or loop shadows the outer label and produces
+[E0036](https://docs.moonbitlang.com/en/latest/language/error_codes/E0036.html). Use distinct names so that each labelled
+`break` or `continue` has an unambiguous target.
+
+### `defer` and `errdefer` expressions
 
 `defer` expression can be used to perform reliable resource cleanup.
 The syntax for `defer` is as follows:
@@ -1305,7 +1507,7 @@ For example, the following program:
 
 will first print `do things with the resource`, and then `perform resource cleanup`.
 `defer` expression will always get executed no matter how its body exits.
-It can handle [error](error-handling.md),
+It can handle [error](https://docs.moonbitlang.com/en/latest/language/error-handling.html),
 as well as control flow constructs including `return`, `break` and `continue`.
 
 Consecutive `defer` will be executed in reverse order, for example, the following:
@@ -1318,8 +1520,79 @@ Consecutive `defer` will be executed in reverse order, for example, the followin
 
 will output first `do things`, then `second defer`, and finally `first defer`.
 
-`return`, `break` and `continue` are disallowed in the right hand side of `defer`.
-Currently, raising error or calling `async` function is also disallowed in the right hand side of `defer`.
+`return`, `break` and `continue` are disallowed in the right-hand side of
+`defer`. The cleanup expression may otherwise raise an error and, in async
+code, perform async operations. If it raises, its error replaces any error
+that caused the body to exit. The following test confirms that the cleanup
+error replaces the body error:
+
+```moonbit
+  let message = try {
+    defer {
+      raise Failure("cleanup error")
+    }
+    raise Failure("body error")
+  } catch {
+    Failure(message) => message
+  }
+  assert_eq(message, "cleanup error")
+```
+
+`errdefer` has the same general form, but runs its cleanup expression only when
+the body raises an error or, for async code, is cancelled:
+
+```moonbit
+errdefer <expr>
+<body>
+```
+
+On normal completion or a `return`, `break`, or `continue`, the cleanup is not
+run. Like `defer`, its cleanup expression may raise an error and, in async
+code, perform async operations. If it raises, its error becomes the result,
+replacing the error that triggered `errdefer`, if any.
+
+It is useful for rolling back partially completed work without handling the
+original error:
+
+```moonbit
+fn operation_that_may_fail() -> Unit raise {
+  fail("operation failed")
+}
+
+test "errdefer" {
+  let mut cleaned_up = false
+  try {
+    errdefer {
+      cleaned_up = true
+    }
+    operation_that_may_fail()
+  } catch {
+    _ => ()
+  }
+  assert_true(cleaned_up)
+}
+```
+
+`errdefer` is especially useful for functions that return a resource:
+
+```moonbit
+  async fn connect(addr : Addr) -> Tcp {
+    let sock = make_tcp_socket()
+    errdefer sock.close()
+    connect_tcp_socket(sock, addr)
+    sock
+  }
+```
+
+If `connect_tcp_socket` succeeds, `sock` is returned to the caller and must not
+be closed. If the connection fails or is cancelled, `sock` is not returned and
+must be closed to avoid a resource leak. Hence `errdefer` is used instead of
+`defer`.
+
+If the body cannot raise an error, the `errdefer` can never run and produces
+[E0091](https://docs.moonbitlang.com/en/latest/language/error_codes/E0091.html). A catch-all handler that only performs cleanup
+and re-raises the same error should generally be replaced with `errdefer`; see
+[E0092](https://docs.moonbitlang.com/en/latest/language/error_codes/E0092.html).
 
 ## Iterator
 
@@ -1394,13 +1667,36 @@ like `each`, `fold`, or `collect`, their internal state advances and cannot be
 reset. If you need to traverse the sequence again, request a new `Iter` from
 the source.
 
+Use `[| ... |]` to construct an `Iter` explicitly. Elements, spread syntax,
+and comprehensions are supported inside the delimiters:
+
+```moonbit
+  let prefix = [| 1, 2, 3 |]
+  let values = [| ..prefix, 4, 5 |]
+  let squares = [| for x in 1..<=3 => x * x |]
+```
+
+In `[| x, y |]`, `x` and `y` are evaluated when the iterator literal is
+constructed. For `..xs`, evaluating `xs` happens immediately, while consuming
+the resulting iterator remains lazy. A comprehension `[| for ... |]` is fully
+lazy and runs as the outer iterator is consumed.
+
+Using an overloaded array literal such as `[x, ..xs]` to construct an `Iter`
+from its expected type is deprecated because the type would silently change
+evaluation order. Use `[| x, ..xs |]` instead.
+
 ## Custom Data Types
 
 There are two ways to create new data types: `struct` and `enum`.
 
 ### Struct
 
-In MoonBit, structs are similar to tuples, but their fields are indexed by field names. A struct can be constructed using a struct literal, which is composed of a set of labeled values and delimited with curly brackets. The type of a struct literal can be automatically inferred if its fields exactly match the type definition. A field can be accessed using the dot syntax `s.f`. If a field is marked as mutable using the keyword `mut`, it can be assigned a new value.
+In MoonBit, structs are similar to tuples, but their fields are indexed by field
+names. A struct can be constructed using a type-qualified struct literal such
+as `T::{ field: value }`. The type prefix makes the constructed type explicit,
+even when the fields would be sufficient to infer it. A field can be accessed
+using the dot syntax `s.f`. If a field is marked as mutable using the keyword
+`mut`, it can be assigned a new value.
 
 ```moonbit
 struct User {
@@ -1421,7 +1717,7 @@ fn main {
 }
 ```
 
-```default
+```none
 0
 John Doe
 john@doe.name
@@ -1437,10 +1733,12 @@ let email = "john@doe.com"
 let u = User::{ id: 0, name, email }
 ```
 
-If there's no other struct that has the same fields, it's redundant to add the struct's name when constructing it:
+An unqualified struct literal can still be inferred when its context identifies
+the type. In a direct `let` binding, prefer keeping the type prefix even when no
+other struct has the same fields:
 
 ```moonbit
-let u2 = { id: 0, name, email }
+let u2 = User::{ id: 0, name, email }
 ```
 
 #### Struct Update Syntax
@@ -1449,8 +1747,8 @@ It's useful to create a new struct based on an existing one, but with some field
 
 ```moonbit
 fn main {
-  let user = { id: 0, name: "John Doe", email: "john@doe.com" }
-  let updated_user = { ..user, email: "john@doe.name" }
+  let user = User::{ id: 0, name: "John Doe", email: "john@doe.com" }
+  let updated_user = User::{ ..user, email: "john@doe.name" }
   println(
     (
       $|{ id: \{user.id}, name: \{user.name}, email: \{user.email} }
@@ -1460,10 +1758,159 @@ fn main {
 }
 ```
 
-```default
+```none
 { id: 0, name: John Doe, email: john@doe.com }
 { id: 0, name: John Doe, email: john@doe.name }
 ```
+
+#### Custom constructors
+
+MoonBit supports defining a custom constructor for any type. A constructor is a
+special method whose name is the same as its result type. The following
+examples start with a struct:
+
+```moonbit
+struct IntBox {
+  value : Int
+} derive(Debug)
+
+pub extend IntBox with Debug::{to_repr}
+```
+
+The constructor should then be implemented as a method whose name is the same as
+the struct type. Its return value must be the struct itself:
+
+```moonbit
+fn IntBox::IntBox(value : Int) -> IntBox {
+  { value, }
+}
+```
+
+If a `struct` declares a constructor, it can be constructed by name directly:
+
+```moonbit
+  let box = IntBox(10)
+  debug_inspect(box, content="{ value: 10 }")
+```
+
+The constructor call follows the constructor method signature, so unlabeled
+parameters can be written in the familiar `TypeName(value)` form.
+
+Constructors may also use labeled and optional arguments, just like normal functions:
+
+```moonbit
+struct StructWithConstr {
+  x : Int
+  y : Int
+} derive(Debug)
+
+pub extend StructWithConstr with Debug::{to_repr}
+```
+
+```moonbit
+fn StructWithConstr::StructWithConstr(x~ : Int, y? : Int = x) -> StructWithConstr {
+  { x, y }
+}
+```
+
+```moonbit
+  let s = StructWithConstr(x=1)
+  debug_inspect(s, content="{ x: 1, y: 1 }")
+```
+
+Because struct constructors are implemented by normal functions, they may raise errors:
+
+```moonbit
+suberror BuildError {
+  NegativeInput
+} derive(Debug)
+
+pub extend BuildError with Debug::{to_repr}
+
+struct Positive {
+  value : Int
+} derive(Debug)
+
+pub extend Positive with Debug::{to_repr}
+```
+
+```moonbit
+fn Positive::Positive(x : Int) -> Positive raise BuildError {
+  guard x >= 0 else { raise NegativeInput }
+  { value: x }
+}
+```
+
+```moonbit
+  try Positive(10) catch {
+    error => debug_inspect(error, content="NegativeInput")
+  } noraise {
+    value => debug_inspect(value, content="{ value: 10 }")
+  }
+  try Positive(-1) catch {
+    error => debug_inspect(error, content="NegativeInput")
+  } noraise {
+    value => debug_inspect(value, content="{ value: -1 }")
+  }
+```
+
+Other types can use the same `fn Type::Type(...) -> Type` form. A custom
+constructor cannot have the same name as an existing constructor of that type:
+
+```moonbit
+enum Endpoint {
+  Host(String, Int)
+} derive(Debug)
+
+pub extend Endpoint with Debug::{to_repr}
+
+fn Endpoint::Endpoint(host : String, port? : Int = 80) -> Endpoint {
+  Host(host, port)
+}
+
+test {
+  let endpoint = Endpoint("example.com", port=443)
+  debug_inspect(endpoint, content="Host(\"example.com\", 443)")
+}
+```
+
+Asynchronous constructors are declared with `async fn TypeName::TypeName` and
+can be used inside async code:
+
+```moonbit
+struct AsyncBox {
+  value : Int
+} derive(Debug)
+
+///|
+pub extend AsyncBox with Debug::{to_repr}
+```
+
+```moonbit
+async fn AsyncBox::AsyncBox(x : Int) -> AsyncBox {
+  @async.sleep(0)
+  { value: x }
+}
+```
+
+```moonbit
+async test "struct constructor async" {
+  let box = AsyncBox(10)
+  debug_inspect(box, content="{ value: 10 }")
+}
+```
+
+Creating a value via a custom constructor has exactly the same call semantics as
+[enum constructors](),
+except that custom constructors cannot be used for pattern matching.
+For example, when creating a foreign `struct` using constructors,
+the package name can be omitted if the expected type of the expression is known.
+
+Since custom constructors are implemented by normal functions,
+they may [raise error](https://docs.moonbitlang.com/en/latest/language/error-handling.html) or [perform asynchronous operations](https://docs.moonbitlang.com/en/latest/language/async-experimental.html).
+Custom constructors also support [optional arguments]().
+Default values for optional arguments are written on the constructor
+implementation, just like normal function signatures.
 
 ### Enum
 
@@ -1520,7 +1967,7 @@ fn main {
 }
 ```
 
-```default
+```none
 smaller!
 equal!
 greater!
@@ -1579,12 +2026,19 @@ fn main {
 }
 ```
 
-```default
+```none
 false
 1,
 2,
 nil
 ```
+
+#### Non-exhaustive enums
+
+A library can mark an enum with [`#non_exhaustive`](https://docs.moonbitlang.com/en/latest/language/attributes.html#non-exhaustive-enum-attribute)
+when later releases may add constructors. Downstream pattern matches must cover
+the currently known constructors and then use `Type::..` to handle constructors
+introduced by a future version of the library.
 
 #### Constructor with labelled arguments
 
@@ -1618,7 +2072,7 @@ fn main {
 }
 ```
 
-```default
+```none
 0!
 0
 ```
@@ -1631,7 +2085,9 @@ enum Object {
   Circle(x~ : Double, y~ : Double, radius~ : Double)
 }
 
-suberror NotImplementedError derive(Show)
+suberror NotImplementedError derive(Debug)
+
+pub extend NotImplementedError with Debug::{to_repr}
 
 fn Object::distance_with(
   self : Object,
@@ -1661,12 +2117,12 @@ fn main {
     println(p1.distance_with(p2))
     println(p1.distance_with(c1))
   } catch {
-    e => println(e)
+    _ => println("NotImplementedError")
   }
 }
 ```
 
-```default
+```none
 5
 NotImplementedError
 ```
@@ -1724,6 +2180,82 @@ fn[X : Compare] Tree::insert(
 }
 ```
 
+#### Extensible enum
+
+An `extenum` defines an open enum type. Unlike a regular `enum`, an
+`extenum` can receive more constructors later, including from another package.
+This is useful when a package wants to define the shared event, message, or
+extension-point type, while other packages contribute their own cases.
+
+```moonbit
+pub extenum LogEvent[T]
+```
+
+The declaration defines the type without constructors. Add the initial
+constructors with `extenum Type += { ... }`; the visibility on the extension
+controls the visibility of those constructors:
+
+```moonbit
+pub(all) extenum LogEvent[T] += {
+  Info(T)
+}
+```
+
+The same package can add more constructors later:
+
+```moonbit
+pub(all) extenum LogEvent[T] += {
+  Warning(T)
+  Critical(T, T)
+}
+```
+
+To extend an extensible enum from another package, the original type declaration
+must use `pub`. Qualify the target type with the package that defines it:
+
+```moonbit
+pub(all) extenum @base.LogEvent[T] += {
+  Debug(T)
+}
+```
+
+Extensible enum constructors are qualified by the package that defines the
+constructor. For constructors from the current package, use the constructor name
+directly when the expected type is known. For constructors from another
+package, use `@pkg.Constructor` in expressions and patterns. When you want to
+make both the extensible enum type and the constructor origin explicit, write
+the constructor as `@type_pkg.Type::@constructor_pkg.Constructor`.
+
+When a package imports both the base package and an extension package, values
+from both packages have the same extensible enum type:
+
+```moonbit
+pub fn describe(event : @base.LogEvent[String]) -> String {
+  match event {
+    @base.Info(message) => "info: \{message}"
+    @base.Warning(message) => "warning: \{message}"
+    @base.Critical(code, message) => "critical \{code}: \{message}"
+    @plugin.Debug(message) => "debug: \{message}"
+    _ => "unknown"
+  }
+}
+
+pub fn debug_event(message : String) -> @base.LogEvent[String] {
+  @plugin.Debug(message)
+}
+
+pub fn qualified_debug_event(message : String) -> @base.LogEvent[String] {
+  @base.LogEvent::@plugin.Debug(message)
+}
+```
+
+Pattern matching must include a wildcard branch, because more constructors
+can be added outside the current declaration.
+
+Only `extenum` declarations can be extended. Regular `enum` declarations are
+closed. Use a regular `enum` when downstream packages should not be able to add
+constructors; private or read-only `extenum` declarations are deprecated.
+
 ### Tuple Struct
 
 MoonBit supports a special kind of struct called tuple struct:
@@ -1747,7 +2279,7 @@ fn main {
 }
 ```
 
-```default
+```none
 1
 John Doe
 ```
@@ -1765,7 +2297,7 @@ fn main {
 }
 ```
 
-```default
+```none
 1
 John Doe
 ```
@@ -1773,9 +2305,6 @@ John Doe
 ### Type alias
 
 MoonBit supports type alias via the syntax `type NewType = OldType`:
-
-#### WARNING
-The old syntax `typealias OldType as NewType` may be removed in the future.
 
 ```moonbit
 pub type Index = Int
@@ -1786,31 +2315,6 @@ pub type MyMap = Map[Int, String]
 Unlike all other kinds of type declaration above, type alias does not define a new type,
 it is merely a type macro that behaves exactly the same as its definition.
 So for example one cannot define new methods or implement traits for a type alias.
-
-### Local types
-
-MoonBit supports declaring structs/enums at the top of a toplevel
-function, which are only visible within the current toplevel function. These
-local types can use the generic parameters of the toplevel function but cannot
-introduce additional generic parameters themselves. Local types can derive
-methods using derive, but no additional methods can be defined manually. For
-example:
-
-```moonbit
-fn[T : Show] toplevel(x : T) -> Unit {
-  enum LocalEnum {
-    A(T)
-    B(Int)
-  } derive(Show)
-  struct LocalStruct {
-    a : (String, T)
-  } derive(Show)
-  struct LocalStructTuple(T) derive(Show)
-  ...
-}
-```
-
-Currently, local types do not support being declared as error types.
 
 ## Pattern Matching
 
@@ -1926,9 +2430,11 @@ palindrome:
 ```moonbit
 test {
   fn palindrome(s : String) -> Bool {
-    loop s.view() {
-      [] | [_] => true
-      [a, .. rest, b] => if a == b { continue rest } else { false }
+    for view = s.view() {
+      match view {
+        [] | [_] => break true
+        [a, .. rest, b] => if a == b { continue rest } else { break false }
+      }
     }
   }
 
@@ -1944,7 +2450,7 @@ cleaner. Note that in this case the `..` followed by string or bytes constant
 matches exact number of elements so its usage is not limited to once.
 
 ```moonbit
-const NO : Bytes = "no"
+const NO : Bytes = b"no"
 
 test {
   fn match_string(s : String) -> Bool {
@@ -1976,7 +2482,8 @@ test {
   let packet : Bytes = b"\xD2\x10\x7F"
   let header : BytesView = packet[0:2]
   let (flag, kind, version, length) = match header {
-    [u1be(flag), u3be(kind), u4be(version), u8be(length)] => (flag, kind, version, length)
+    [u1be(flag), u3be(kind), u4be(version), u8be(length)] =>
+      (flag, kind, version, length)
     _ => fail("bad header")
   }
   assert_eq(flag, 1)
@@ -1994,7 +2501,7 @@ test {
   let data : Bytes = b"\xF1\xAA\xBB"
   let view : BytesView = data[0:]
   let tag = match view {
-    [u4be(0b1111), u4be(tag), ..rest] => {
+    [u4be(0b1111), u4be(tag), .. rest] => {
       assert_eq(rest, b"\xAA\xBB"[0:])
       tag
     }
@@ -2055,6 +2562,25 @@ Result types depend on width:
 | 33..64 bits (`u`)    | `UInt64`       |
 | 33..64 bits (`i`)    | `Int64`        |
 
+Use `v128le(pattern)` at a byte-aligned offset to extract a 128-bit
+little-endian SIMD value. Its payload has type `V128`.
+
+```moonbit
+test {
+  let bytes = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F"
+  let vector : V128 = match bytes {
+    [v128le(value)] => value
+    _ => fail("expected 16 bytes")
+  }
+  let _ = vector
+}
+```
+
+#### NOTE
+Known compiler issue: this example is currently skipped for the native Windows
+target because the C backend's `v128.load` fallback recurses. This is not an
+incompatibility between Windows and SSE2.
+
 ### Range Pattern
 
 For builtin integer types and `Char`, MoonBit allows matching whether the value falls in a specific range.
@@ -2106,7 +2632,7 @@ match map {
 }
 ```
 
-- To match a data type `T` using map pattern, `T` must have a method `op_get(Self, K) -> Option[V]` for some type `K` and `V` (see [method and trait](methods.md)).
+- To match a data type `T` using map pattern, `T` must have a method `get(Self, K) -> Option[V]` for some type `K` and `V` (see [method and trait](https://docs.moonbitlang.com/en/latest/language/methods.html)).
 - Currently, the key part of map pattern must be a literal or constant
 - Map patterns are always open: the unmatched keys are silently ignored, and `..` needs to be added to identify this nature
 - Map pattern will be compiled to efficient code: every key will be fetched at most once
@@ -2122,6 +2648,39 @@ match json {
   ...
 }
 ```
+
+### Default bindings in or-patterns
+
+Every alternative of an or-pattern normally has to bind the same variables.
+Use `with` on an alternative to provide defaults for variables that it does not
+bind structurally:
+
+```moonbit
+fn option_value(value : Int?) -> Int {
+  match value {
+    Some(x) | (None with x = 0) => x
+  }
+}
+
+fn pair_value(value : (Int, Int)?) -> Int {
+  match value {
+    Some((x, y)) | (None with x = 0, y = 0) => x + y
+  }
+}
+
+test {
+  assert_eq(option_value(None), 0)
+  assert_eq(option_value(Some(42)), 42)
+  assert_eq(pair_value(None), 0)
+  assert_eq(pair_value(Some((20, 22))), 42)
+}
+```
+
+For multiple defaults, write `(Pattern with x = value, y = value)`. Parentheses
+make it clear which alternative receives a default. A default can be a general
+expression evaluated in the surrounding scope. It cannot refer to a binder from
+the complete pattern, and control flow such as `return`, `break`, `continue`, or
+`raise` is not allowed inside the default expression.
 
 ### Guard condition
 
@@ -2201,7 +2760,7 @@ fn[S, T] List::reduce(self : List[S], op : (T, S) -> T, init : T) -> T {
 
 ### Pipelines
 
-MoonBit provides a convenient pipe syntax `x |> f(y)`, which can be used to chain regular function calls:
+MoonBit provides convenient pipe syntaxes `x |> f(y)` and `f <| x`, which can be used to chain regular function calls or make nested builder-style code easier to read:
 
 ```moonbit
 5 |> ignore // <=> ignore(5)
@@ -2209,7 +2768,7 @@ MoonBit provides a convenient pipe syntax `x |> f(y)`, which can be used to chai
 1
 |> add(5) // <=> add(1, 5)
 |> x => { x + 1 }
-|> ignore // <=> ignore(add(1, 5))
+|> ignore // <=> ignore(add(1, 5) + 1)
 ```
 
 The MoonBit code follows the *data-first* style, meaning the function places its "subject" as the first argument.
@@ -2220,24 +2779,38 @@ You can use the `_` operator to insert `x` into any argument of the function `f`
 
 The pipe operator can also connect to an arrow function. When piping into an arrow function, the function body must be wrapped in curly braces, for example `value |> x => { x + 1 }`.
 
+The reverse pipe operator applies the right-hand side as the final argument of the left-hand side call. For example, `f <| x` is equivalent to `f(x)`, and `f(a, b) <| c` is equivalent to `f(a, b, c)`. This is especially useful for DSL-like code, since nested calls such as `div([text("hello")])` can instead be written as `div <| [text <| "hello"]`.
+
+```moonbit
+let page = div <| [
+    text <| "hello",
+    section("toolbar") <| fn() { [text <| "save", text <| "cancel"] },
+  ]
+inspect(
+  page,
+  content="div(text(hello), toolbar: div(text(save), text(cancel)))",
+)
+```
+
+Because reverse pipe attaches the final argument, it also works well with functions whose last argument is a lambda, enabling a trailing-lambda style such as `section("toolbar") <| fn () { ... }`.
+
 ### Cascade Operator
 
 The cascade operator `..` is used to perform a series of mutable operations on
 the same value consecutively. The syntax is as follows:
 
 ```moonbit
-[]..append([1])
+let arr = []..append([1])
 ```
 
-- `x..f()..g()` is equivalent to `{ x.f(); x.g(); }`.
-- `x..f().g()` is equivalent to `{ x.f(); x.g(); }`.
+Here, `x..f()` is equivalent to `{ x.f(); x }`.
 
 Consider the following scenario: for a `StringBuilder` type that has methods
 like `write_string`, `write_char`, `write_object`, etc., we often need to perform
 a series of operations on the same `StringBuilder` value:
 
 ```moonbit
-let builder = StringBuilder::new()
+let builder = StringBuilder()
 builder.write_char('a')
 builder.write_char('a')
 builder.write_object(1001)
@@ -2252,7 +2825,7 @@ for all methods that return `Unit`, cascade operator can be used for
 consecutive operations without the need to modify the return type of the methods.
 
 ```moonbit
-let result = StringBuilder::new()
+let result = StringBuilder()
   ..write_char('a')
   ..write_char('a')
   ..write_object(1001)
@@ -2293,16 +2866,17 @@ contexts:
    ```moonbit
    fn g(x : Array[Int?]) -> Unit {
      if x is [v, .. rest] && v is Some(i) && i is (0..=10) {
-       println(v)
+       debug(v)
        println(i)
-       println(rest)
+       debug(rest)
      }
    }
    ```
-3. In the following statements of a `guard` condition:
+3. In the following statements after a successful `guard` or `guard!`
+   condition:
    ```moonbit
    fn h(x : Int?) -> Unit {
-     guard x is Some(v)
+     guard! x is Some(v)
      println(v)
    }
    ```
@@ -2327,55 +2901,455 @@ fn j(x : Int) -> Int? {
 }
 
 fn init {
-  guard j(42) is (Some(a) as b)
+  guard! j(42) is (Some(a) as b)
   println(a)
-  println(b)
+  debug(b)
 }
 ```
 
-### Lexmatch
+### Regex Literal Expression
 
-`lexmatch` matches a `String` against a regex pattern and lets you bind the
-pieces of a match. The search-mode pattern is `(before, regex pieces, after)`,
-where `before` and `after` are optional bindings for the unmatched prefix and
-suffix, separated by commas. The regex pieces in the middle are separated by
-whitespace only. The regex itself is written as a sequence of string literals,
-so you can split it across lines or insert comments between parts. You can
-also bind a matched sub-pattern using `as`, such as `("b*" as b)`.
+`re"..."` is a regex literal expression. Its type is `Regex`.
 
-`lexmatch?` is a boolean check similar to `is`, and it can introduce binders
-for use in the same contexts as `is` expressions.
+Regex literals are ordinary expressions, so they can be stored in local
+bindings, passed as arguments, used as default argument values, and defined as
+constants:
 
-`lexmatch` also supports a lexer-style mode: `lexmatch <expr> with longest`,
-which picks the longest match among alternatives (for example, `if|[a-z]*`
-matches `iff` as `iff` in longest mode, while search mode matches `if` first).
+```moonbit
+let r : Regex = re"a(b+)"
+const IDENT_START : Regex = re"[A-Za-z_]"
+const IDENT : Regex = IDENT_START + re"[A-Za-z0-9_]*"
+```
 
-Regex literals do not support `\\b`, `\\s`, or `\\w`. Use POSIX character
-classes like `[:digit:]` inside ranges (for example, `[[:digit:]]`).
+Regex values can also be combined with `+` for sequence and `|` for
+alternation. In places that require a regex constant expression, such as
+[`=~`](), named `const` values defined from regex
+literals can be referenced directly.
+
+Unlike ordinary string literals, regex literals do not require double-escaping
+backslashes. For example, write `re"/\*"` instead of `re"/\\*"`.
+
+```moonbit
+const REGEX_IDENT_START = re"[A-Za-z_]"
+
+const REGEX_IDENT_CONT = re"[A-Za-z0-9_]*"
+
+const REGEX_AB : Regex = re"a" + re"b"
+
+fn regex_default_arg(re? : Regex = re"abc") -> Bool {
+  re.execute("zabc") is Some(_)
+}
+
+test {
+  let regex : Regex = re"a(b+)"
+  assert_true(regex.execute("abbb") is Some(_))
+  assert_true(regex.execute("ac") is None)
+
+  assert_true(REGEX_AB.execute("ab") is Some(_))
+  assert_true(REGEX_AB.execute("ac") is None)
+  assert_true(regex_default_arg())
+}
+```
+
+Invalid regex literals are rejected at compile time.
+
+Regex literals use MoonBit's regex syntax. The supported forms include:
+
+- Literal characters: ordinary characters match themselves
+- Wildcard: `.` matches any single character, including newline
+- Character classes: `[abc]`, `[^abc]`, `[a-z]`
+- POSIX classes inside character classes: `[[:digit:]]`, `[[:alpha:]]`,
+  `[[:space:]]`, `[[:word:]]`, `[[:xdigit:]]`, etc.
+- Quantifiers: `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`
+- Non-greedy quantifiers: `*?`, `+?`, `??`, `{n}?`, `{n,}?`, `{n,m}?`
+- Grouping and alternation: `( ... )`, `(?: ... )`, `(?<name> ... )`, `a|b`
+- Assertions: `^`, `$`, `\b`, `\B`
+- Scoped modifier: `(?i: ... )` for case-insensitive matching
+
+Escape handling is regex-oriented rather than string-oriented. Common escapes
+include `\n`, `\r`, `\t`, `\f`, `\v`, escaped metacharacters such as `\.` and
+`\(`, and Unicode escapes `\uXXXX` / `\u{X...}`. To match a literal `{`, use
+`[{]` rather than `\{`. This leaves room for future interpolation support in
+regex literals, where `\{` would conflict with the interpolation syntax.
+
+There are several important semantics and restrictions:
+
+- `^` and `$` are non-multiline anchors: they match only the beginning and end
+  of the whole input
+- `\b` and `\B` are currently usable when a regex literal is handled as a
+  first-class `Regex` value
+  They are not currently available in `regex match expression` constant
+  contexts such as [`=~`](), but this restriction is
+  expected to be relaxed in the future
+- POSIX character classes are ASCII-based
+- `\d`, `\D`, `\s`, `\S`, `\w`, and `\W` are not supported
+  Use `[[:digit:]]`, `[^[:digit:]]`, `[[:space:]]`, `[^[:space:]]`,
+  `[[:word:]]`, and `[^[:word:]]` instead
+- `\xHH` byte escapes are not supported in `re"..."`; use Unicode escapes or
+  ordinary characters instead
+- Lookahead, lookbehind, backreferences, and character-class set operations are
+  not supported
+- In character classes, `-` is used for ranges
+  To match a literal dash, escape it as `\-`; putting `-` at the start or end
+  of a character class is not supported
+
+Named capture groups such as `(?<id>[0-9]+)` belong to the `Regex` value
+itself. They are useful with APIs such as `Regex::execute` and
+`MatchResult::named_group`, but they do not introduce MoonBit binders by
+themselves.
+
+When a regex literal is used as a first-class `Regex` value, operations such
+as `Regex::execute` use first-match semantics: they return the first match
+found from the search position. They do not provide a longest-match mode.
+
+### Regex Match Expression
+
+Regex match expressions use the `=~` operator to search a `StringView` with a
+regex constant expression. The expression returns `Bool`; use it when a single
+boolean check is enough, and use [`lexmatch`]() when several regex
+cases return different results.
+
+```moonbit
+input =~ re"abc"
+input =~ ((PREFIX + SUFFIX) as whole, before=head, after=tail)
+input =~ (re"b", before~, after~)
+```
+
+The right-hand side must be a regex constant expression: a regex literal such
+as `re"abc"`, a named `const`, or an expression built from constants with `+`
+(concatenation), `|` (alternation), and parentheses. Arbitrary runtime values
+are not allowed.
+
+Use `as` to bind the matched substring. Use `before` and `after` to bind the
+unmatched prefix and suffix as `StringView`; `before~` and `after~` are
+shorthand forms that bind variables named `before` and `after`.
+
+This is separate from regex named capture groups. For example, in
+`re"(?<id>[0-9]+)"`, the name `id` is part of the regex engine's capture
+metadata, not a MoonBit binder. If you need a binder in `=~`, use `as`, such
+as `(re"(?<id>[0-9]+)" as digits)`.
+
+Like `is`, binders introduced by `=~` can be used in the same boolean-flow
+contexts, such as the right-hand side of `&&` and the true branch of `if`.
+Regex matching is search-based by default, so `"zabc!" =~ re"abc"` is `true`.
+Use anchors such as `^` and `$` when you need to constrain the match to the
+beginning or end of the input.
+
+`=~` also uses first-match semantics. It will not support longest-match
+behavior.
 
 ```moonbit
 test {
-  let text = "xxabbbcyy"
+  let input = " let_name = 42 "
+  if (input =~ (
+      (REGEX_IDENT_START + REGEX_IDENT_CONT) as ident,
+      before=head,
+      after=tail
+    )) {
+    assert_true(head is " ")
+    assert_true(ident is "let_name")
+    assert_true(tail is " = 42 ")
+  } else {
+    fail("expected identifier")
+  }
+
+  if ("abc" =~ (re"b", before~, after~)) {
+    assert_true(before is "a")
+    assert_true(after is "c")
+  } else {
+    fail("expected middle match")
+  }
+
+  let source : StringView = "abc"
+  if (source =~ (re"." as ch, after=rest)) {
+    assert_eq(ch, 'a')
+    assert_true(rest is "bc")
+  } else {
+    fail("expected leading char")
+  }
+
+  assert_true("zabc!" =~ re"abc")
+  assert_true(!("zabc!" =~ re"^abc"))
+}
+```
+
+In the example above, `head`, `ident`, `tail`, `before`, `after`, and `rest`
+have type `StringView`. The binder `ch` has type `Char`, because `re"."`
+matches exactly one character.
+
+### Lexmatch
+
+Use `lexmatch` to match an in-memory `String` or `StringView` against several
+regex cases and evaluate the body of the selected case. Its syntax is:
+
+```moonbit
+lexmatch input [with first|longest] {
+  regex_case => expression
+  ...
+  [catch_all => fallback_expression]
+}
+```
+
+Each regex case contains a regex constant expression, optionally with `as`,
+`before=`, and `after=` bindings. `Bytes`, `BytesView`, and other input types
+are not supported.
+
+The strategy controls how overlapping cases are resolved:
+
+- `first` is the default. As with `match`, cases have priority from top to
+  bottom, and the first case whose regex can match is selected. This is case
+  priority, not a leftmost-first comparison among matches from different
+  cases: an earlier unanchored case that matches later in the input takes
+  precedence over a later case that matches earlier.
+- `longest` selects the case that consumes the longest input prefix. Every
+  regex must start with `^`. If several cases consume the same number of
+  characters, their source order breaks the tie. Non-greedy quantifiers such
+  as `*?` and `+?` are not supported with this strategy.
+
+Use `as` to bind the substring matched by a regex or one of its subexpressions.
+Captures have type `StringView`, except that a regex known to match exactly one
+character, such as `re"."`, produces a `Char` capture.
+
+`before=` and `after=` bind the unmatched prefix and suffix as `StringView`.
+The shorthand forms `before~` and `after~` bind variables with those names,
+while `before=_` and `after=_` explicitly discard the corresponding part.
+First-match mode supports both bindings. Longest-match mode starts at the
+beginning of the input, so it supports `after=` but not `before=`.
+
+For first-match cases, bind or explicitly discard `before` and `after`, or use
+`^` and `$` to make the intended boundaries clear. For longest-match cases,
+use `after=` when a case consumes only a prefix; add `$` instead when it must
+consume the whole input.
+
+```moonbit
+test "scan strings" {
+  let text = "xx123yy"
   lexmatch text {
-    (before, "a" ("b*" as b) "c", after) => {
+    (re"[0-9]+" as digits, before~, after~) => {
       inspect(before, content="xx")
-      inspect(b, content="bbb")
+      inspect(digits, content="123")
       inspect(after, content="yy")
     }
     _ => fail("")
   }
 
-  if text lexmatch? ("a" ("b*" as b) "c") && b.length() > 0 {
-    inspect(b, content="bbb")
-  }
-
-  let keyword = "iff"
-  lexmatch keyword with longest {
-    ("if|[a-z]*" as ident) => inspect(ident, content="iff")
+  lexmatch "letters123" with longest {
+    (re"^[a-z]+" as word, after=rest) => {
+      inspect(word, content="letters")
+      inspect(rest, content="123")
+    }
     _ => fail("")
   }
 }
 ```
+
+A catch-all case is required only when the regex cases do not cover every
+possible input. If the compiler can prove that the regex cases are exhaustive,
+the catch-all may be omitted. Otherwise it reports [E4224](https://docs.moonbitlang.com/en/latest/language/error_codes/E4224.html).
+A present catch-all must be last; a binder such as `rest` receives the entire
+input when no regex case matches, while `_` discards it. The compiler reports
+[E0090](https://docs.moonbitlang.com/en/latest/language/error_codes/E0090.html) when a regex case or catch-all can never be
+selected.
+
+### Lexscan
+
+Use `lexscan` to consume successive tokens while it updates the cursor stored
+in its target. The target can be an in-memory `@lexbuf.StringScanner`, a
+synchronous streaming `@lexbuf.Lexbuf`, or an asynchronous streaming
+`@lexbuf.AsyncLexbuf`. `lexscan` uses the same case syntax and `first` or
+`longest` strategies as `lexmatch`:
+
+```moonbit
+lexscan input [with first|longest] {
+  regex_case => expression
+  ...
+  [catch_all => fallback_expression]
+}
+```
+
+These scanner types require a direct `moonbitlang/core/lexbuf` import. This
+runnable example also imports the official `moonbitlang/async` runtime so its
+asynchronous scanner can be tested with `async test`:
+
+```moonbit
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/lexbuf",
+}
+```
+
+Every `lexscan` regex must start with `^`, because scanning always begins at the
+target's current cursor. `lexscan` cases do not support `before=` or `after=`.
+They may still use `as` to bind matched text, with the same `StringView` and
+`Char` capture types as `lexmatch`.
+
+In `first` mode, `lexscan` tests the cases from top to bottom, like `match`, and
+selects the first regex that matches at the current cursor. Here `first` refers
+to case priority: it does not compare leftmost match positions or match lengths
+across cases. Because every `lexscan` regex is anchored with `^`, all cases are
+tested from the same current cursor position.
+
+A `String` or `StringView` value is not a valid `lexscan` target. Use `lexmatch`
+to match one in-memory value, or put a `StringView` in a `StringScanner` when
+successive scans should share a cursor. `Bytes`, `BytesView`, and user-defined
+lexbuf-like types are not supported.
+
+#### String scanners
+
+`@lexbuf.StringScanner` scans an in-memory `StringView`. Subject to the
+`lexscan` restrictions above, case selection and captures behave like applying
+`lexmatch` to the unconsumed part of `scanner.data`, starting at
+`scanner.cursor`. After a regex case is selected, `lexscan` updates
+`scanner.cursor` to the end of the match. The same scanner can therefore be
+passed to successive calls without slicing the input or updating an offset
+manually.
+
+Construct a string scanner with its cursor at `0`:
+
+```moonbit
+let scanner = @lexbuf.StringScanner::{ data: text[:], cursor: 0 }
+```
+
+Both the cursor and the `StringView` indexes are measured in UTF-16 code units.
+The cursor is relative to `data` and must be in `0..=data.length()`, so `data`
+may itself be a slice of a larger string. A catch-all branch must be `_`; it
+does not advance the cursor.
+
+The following scanner skips whitespace and returns one token per call. The
+test also shows that `lexscan` maintains the cursor:
+
+```moonbit
+priv enum Token {
+  Word(StringView)
+  Integer(StringView)
+  Punctuation(Char)
+  Eof
+}
+
+///|
+fn next_string_token(input : @lexbuf.StringScanner) -> Token {
+  lexscan input with longest {
+    re"^[[:space:]]+" => next_string_token(input)
+    re"^[[:alpha:]]+" as word => Word(word)
+    re"^[[:digit:]]+" as digits => Integer(digits)
+    re"^." as mark => Punctuation(mark)
+    _ => Eof
+  }
+}
+
+///|
+test "scan an in-memory string with a maintained cursor" {
+  let input = @lexbuf.StringScanner::{ data: "hello 123!"[:], cursor: 0 }
+  guard next_string_token(input) is Word(word) else { fail("expected word") }
+  assert_true(word == "hello")
+  assert_eq(input.cursor, 5)
+  guard next_string_token(input) is Integer(digits) else {
+    fail("expected integer")
+  }
+  assert_true(digits == "123")
+  assert_eq(input.cursor, 9)
+  guard next_string_token(input) is Punctuation(mark) else {
+    fail("expected punctuation")
+  }
+  assert_true(mark == '!')
+  assert_eq(input.cursor, input.data.length())
+  assert_true(next_string_token(input) is Eof)
+  assert_eq(input.cursor, input.data.length())
+}
+```
+
+#### Streaming scanners
+
+`Lexbuf` and `AsyncLexbuf` retain a cursor between `lexscan` calls. A successful
+regex case consumes the matched prefix and commits the cursor to the end of
+that match. This makes a recursive or repeated scanner behave like a lexer.
+Patterns may span any number of chunks supplied by `from_fn`; a chunk boundary
+does not end a token.
+
+As with `lexmatch`, a catch-all is required only when the regex cases are not
+exhaustive. A `lexscan` catch-all must be written as `_`: it handles EOF or an
+otherwise unmatched character, does not bind the remaining input, and does not
+advance the target cursor.
+
+The following scanner skips whitespace and returns one token per call:
+
+```moonbit
+priv enum StreamToken {
+  StreamWord(StringView)
+  StreamInteger(StringView)
+  StreamPunctuation(Char)
+  StreamEof
+}
+
+///|
+fn next_token(input : @lexbuf.Lexbuf) -> StreamToken {
+  lexscan input with longest {
+    re"^[[:space:]]+" => next_token(input)
+    re"^[[:alpha:]]+" as word => StreamWord(word)
+    re"^[[:digit:]]+" as digits => StreamInteger(digits)
+    re"^." as mark => StreamPunctuation(mark)
+    _ => StreamEof
+  }
+}
+
+///|
+test "scan a synchronous stream" {
+  let chunks = ["hello ", "123!"][:].iter()
+  let input = @lexbuf.Lexbuf::from_fn(() => chunks.next())
+  guard next_token(input) is StreamWord(word) else { fail("expected word") }
+  assert_true(word == "hello")
+  guard next_token(input) is StreamInteger(digits) else {
+    fail("expected integer")
+  }
+  assert_true(digits == "123")
+  guard next_token(input) is StreamPunctuation(mark) else {
+    fail("expected punctuation")
+  }
+  assert_true(mark == '!')
+  assert_true(next_token(input) is StreamEof)
+}
+```
+
+`AsyncLexbuf` has the same matching and cursor semantics. Its source is an
+`async () -> String?` function, so a function that scans it must also be
+`async`. MoonBit has no `await` keyword; call the async scanner normally from
+async code.
+
+```moonbit
+/// Returns the next alphabetic token from an asynchronous lexbuf.
+pub async fn next_word(input : @lexbuf.AsyncLexbuf) -> StringView? {
+  lexscan input {
+    re"^[[:alpha:]]+" as word => Some(word)
+    _ => None
+  }
+}
+```
+
+`lexmatch` and `lexscan` case bodies cannot have guards. The expression selects
+a case before it evaluates the body, so put any additional condition inside
+that body.
+
+### Legacy lexical pattern syntax
+
+Earlier experimental versions used string-piece `lexmatch` patterns and a
+`lexmatch?` boolean form. Those forms have been removed. The `lexmatch` keyword
+now denotes the in-memory regex-case expression described above.
+
+For example, older code may look like this:
+
+```moonbit
+lexmatch text {
+  (before, "a" ("b*" as b) "c", after) => ...
+  _ => ...
+}
+
+if text lexmatch? ("a" ("b*" as b) "c") && b.length() > 0 {
+  ...
+}
+```
+
+Convert case-based code to `lexmatch` with regex constant expressions. For a
+single boolean search, use [`=~`]() instead.
 
 ### Spread Operator
 
@@ -2390,9 +3364,23 @@ For example, we can use the spread operator to construct an array:
 test {
   let a1 : Array[Int] = [1, 2, 3]
   let a2 : FixedArray[Int] = [4, 5, 6]
-  let a3 : @list.List[Int] = @list.from_array([7, 8, 9])
+  let a3 : @list.List[Int] = @list.List([7, 8, 9])
   let a : Array[Int] = [..a1, ..a2, ..a3, 10]
-  inspect(a, content="[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]")
+  debug_inspect(a, content="[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]")
+}
+```
+
+A conditional spread `..if condition { sequence }` contributes the sequence
+only when the condition is true:
+
+```moonbit
+test {
+  let include_middle = true
+  let values = [1, ..if include_middle { [2, 3] }, 4]
+  assert_eq(values, [1, 2, 3, 4])
+
+  let without_middle = [1, ..if false { [2, 3] }, 4]
+  assert_eq(without_middle, [1, 4])
 }
 ```
 
@@ -2413,7 +3401,7 @@ sequence.
 
 ```moonbit
 test {
-  let b1 : Bytes = "hello"
+  let b1 : Bytes = b"hello"
   let b2 : BytesView = b1[1:4]
   let b : Bytes = [..b1, ..b2, 10]
   inspect(

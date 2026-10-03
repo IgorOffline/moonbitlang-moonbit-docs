@@ -3,7 +3,7 @@
 Error handling has always been at core of our language design. In the following
 we'll be explaining how error handling is done in MoonBit. We assume you have
 some prior knowledge of MoonBit, if not, please checkout
-[A tour of MoonBit](../tutorial/tour.md).
+[A tour of MoonBit](https://docs.moonbitlang.com/en/latest/tutorial/tour.html).
 
 ## Error Types
 
@@ -25,9 +25,6 @@ suberror E3 { // error type E3 has three constructors like a normal enum type
 }
 ```
 
-#### WARNING
-The older `suberror A B` syntax is deprecated. Use `suberror A { A(B) }` instead.
-
 The error types can be promoted to the `Error` type automatically, and pattern
 matched back:
 
@@ -36,7 +33,7 @@ suberror CustomError { CustomError(UInt) }
 
 test {
   let e : Error = CustomError(42)
-  guard e is CustomError(m)
+  guard! e is CustomError(m)
   assert_eq(m, 42)
 }
 ```
@@ -57,6 +54,23 @@ fn f(e : Error) -> Unit {
 
 The `Error` is meant to be used where no concrete error type is needed, or a
 catch-all for all kinds of sub-errors is needed.
+
+To match every constructor of one particular suberror type, use the wildcard
+constructor pattern `Type::_`. The pattern may capture the refined suberror
+value with `as`, but a final `_` arm is still needed to cover other suberror
+types:
+
+```moonbit
+fn handle_e3(error : Error) -> Unit {
+  match error {
+    E3::_ as e => {
+      ignore(e)
+      println("E3 error")
+    }
+    _ => println("another error type")
+  }
+}
+```
 
 ### Failure
 
@@ -84,7 +98,9 @@ indicate that the function might raise an error during an execution. For
 example, the following function `div` might return an error of type `DivError`:
 
 ```moonbit
-suberror DivError { DivError(String) }
+suberror DivError { DivError(String) } derive(Debug)
+
+pub extend DivError with Debug::{to_repr}
 
 fn div(x : Int, y : Int) -> Int raise DivError {
   if y == 0 {
@@ -210,7 +226,7 @@ fn main {
 }
 ```
 
-```default
+```none
 division by zero
 ```
 
@@ -222,7 +238,7 @@ The `noraise` block can be omitted if no action is needed when no error is
 caught. For example:
 
 ```moonbit
-try { println(div(42, 0)) } catch {
+println(div(42, 0)) catch {
   _ => println("Error")
 }
 ```
@@ -237,19 +253,18 @@ println(a)
 
 ### Transforming to Result
 
-You can also catch the potential error and transform into a first-class value of
-the [`Result`](fundamentals.md#option-and-result) type, by using
-`try?` before an expression that may throw error:
+You can also catch the potential error and transform it into a first-class value
+of the [`Result`](https://docs.moonbitlang.com/en/latest/language/fundamentals.html#option-and-result) type:
 
 ```moonbit
 test {
-  let res = try? (div(6, 0) * div(6, 3))
-  inspect(
-    res,
-    content=(
-      #|Err("division by zero")
-    ),
-  )
+  let res : Result[Int, DivError] = Ok(div(6, 0) * div(6, 3)) catch {
+    error => Err(error)
+  }
+  match res {
+    Err(DivError(message)) => @test.assert_eq(message, "division by zero")
+    Ok(_) => fail("expected division to fail")
+  }
 }
 ```
 
